@@ -1,6 +1,6 @@
 ﻿import { useMemo } from "react";
 
-export type TabKey = "home" | "search" | "cart" | "analytics" | "profile";
+export type TabKey = "home" | "search" | "cart" | "analytics" | "ai" | "profile";
 
 export default function TabBar({
   active,
@@ -15,9 +15,9 @@ export default function TabBar({
     () =>
       [
         { key: "home" as const, label: "Главная", icon: "/media/home.svg" },
-        { key: "search" as const, label: "Поиск", icon: "/media/search1.svg" },
         { key: "cart" as const, label: "Корзина", icon: "/media/basket.svg" },
         { key: "analytics" as const, label: "Аналитика", icon: "/media/history_white.svg" },
+        { key: "ai" as const, label: "ИИ", icon: "/media/ai.svg" },
         { key: "profile" as const, label: "Профиль", icon: "/media/ava.svg" },
       ] as const,
     []

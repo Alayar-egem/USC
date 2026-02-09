@@ -7,6 +7,9 @@ var __dirname = dirname(__filename);
 export default defineConfig({
     plugins: [react()],
     server: {
+        host: "0.0.0.0",
+        port: 5173,
+        strictPort: true,
         proxy: {
             // проксируем ТОЛЬКО API, НЕ /media
             "/api": {
@@ -15,6 +18,11 @@ export default defineConfig({
                 secure: false,
             },
         },
+    },
+    preview: {
+        host: "0.0.0.0",
+        port: 5173,
+        strictPort: true,
     },
     resolve: {
         alias: {

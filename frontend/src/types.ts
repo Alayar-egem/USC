@@ -3,6 +3,7 @@ export type Screen =
   | "search"
   | "cart"
   | "analytics"
+  | "ai"
   | "profile"
   | "publications"
   | "profile-edit"

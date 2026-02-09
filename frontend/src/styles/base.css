@@ -19,6 +19,7 @@
   --radius-sm: 12px;
   --shadow-soft: 0 10px 30px rgba(15, 23, 42, 0.08);
   --shadow-card: 0 8px 22px rgba(15, 23, 42, 0.12);
+  --tabbar-space: 96px;
 }
 
 *,
@@ -51,20 +52,21 @@ body {
 .app {
   max-width: 420px;
   margin: 0 auto;
-  min-height: 100vh;
+  min-height: 100dvh;
   background: linear-gradient(180deg, #f7f9ff 0%, #f4f6fb 50%, #eef2ff 100%);
   position: relative;
   color: var(--text);
 }
 
 .screens {
-  /* Keep content fully scrollable above fixed bottom tabbar on all devices. */
-  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  padding-bottom: 0;
 }
 
 .screen {
   display: none;
   padding: 14px 14px 0;
+  min-height: calc(100dvh - var(--tabbar-space) - env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--tabbar-space) + env(safe-area-inset-bottom));
 }
 
 .screen.active {

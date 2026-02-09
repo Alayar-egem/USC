@@ -1,4 +1,4 @@
-import type { Screen } from "../types";
+﻿import type { Screen } from "../types";
 
 export function Drawer({
   open,
@@ -9,6 +9,9 @@ export function Drawer({
   companyName,
   role,
   notificationCount = 0,
+  ratingValue = 4.8,
+  reviewCount = 128,
+  completedOrders = 96,
 }: {
   open: boolean;
   onClose: () => void;
@@ -18,33 +21,51 @@ export function Drawer({
   companyName?: string | null;
   role?: string | null;
   notificationCount?: number;
+  ratingValue?: number;
+  reviewCount?: number;
+  completedOrders?: number;
 }) {
+  const safeRating = Math.max(0, Math.min(5, ratingValue));
+
   return (
     <>
       <div className="overlay" style={{ display: open ? "block" : "none" }} onClick={onClose} />
       <aside className="drawer" style={{ transform: open ? "translateX(0)" : "translateX(-110%)" }}>
-        <div className="drawer-header">
-          <div className="drawer-avatar">
-            <img src="/media/ava_burger.svg" alt="Профиль" id="drawer-avatar" />
+        <div className="drawer-top">
+          <div className="drawer-header">
+            <div className="drawer-avatar">
+              <img src="/media/ava_burger.svg" alt="Профиль" id="drawer-avatar" />
+            </div>
+            <button className="drawer-close" onClick={onClose}>
+              ×
+            </button>
           </div>
-          <button className="drawer-close" onClick={onClose}>
-            ×
-          </button>
-        </div>
 
-        <div className="drawer-rating">
-          <div className="stars">
-            <img src="/media/star.svg" alt="" className="star filled" />
-            <img src="/media/star.svg" alt="" className="star filled" />
-            <img src="/media/star.svg" alt="" className="star filled" />
-            <img src="/media/star.svg" alt="" className="star filled" />
-            <img src="/media/star_none.svg" alt="" className="star" />
+          <div className="drawer-rating">
+            <div className="stars">
+              {Array.from({ length: 5 }, (_, idx) => {
+                const fill = Math.max(0, Math.min(1, safeRating - idx));
+                const steppedFillPct = Math.round(fill * 5) * 20;
+                return (
+                  <span key={idx} className="star-slot" aria-hidden="true">
+                    <img className="star-base" src="/media/star_none.svg" alt="" />
+                    <span className="star-fill" style={{ width: `${steppedFillPct}%` }}>
+                      <img className="star-top" src="/media/star.svg" alt="" />
+                    </span>
+                  </span>
+                );
+              })}
+            </div>
+            <div className="drawer-rating-text" id="drawer-rating-text">
+              {`${safeRating.toFixed(1)} · ${reviewCount} отзывов`}
+            </div>
+            <div className="drawer-score-row">
+              <span className="drawer-score-pill">{`${completedOrders} заказов`}</span>
+              <span className="drawer-score-pill drawer-score-pill-accent">{`${Math.max(94, Math.min(99, Math.round(safeRating * 20)))}% SLA`}</span>
+            </div>
+            {companyName && <div className="drawer-company">{companyName}</div>}
+            {role && <div className="drawer-role">{role}</div>}
           </div>
-          <div className="drawer-rating-text" id="drawer-rating-text">
-            4.0 · 85 отзывов
-          </div>
-          {companyName && <div className="drawer-company">{companyName}</div>}
-          {role && <div className="drawer-role">{role}</div>}
         </div>
 
         <nav className="drawer-menu">

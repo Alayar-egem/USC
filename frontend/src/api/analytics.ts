@@ -20,6 +20,23 @@ export type AnalyticsSummary = {
   insights: string[];
 };
 
+export type AnalyticsAssistantResponse = {
+  summary: string;
+  probable_causes: string[];
+  actions: string[];
+  confidence: number;
+  focus_month: string | null;
+  show_metrics?: boolean;
+  metrics: {
+    mom_pct: number | null;
+    delivery_rate_pct: number;
+    cancel_rate_pct: number;
+    market_share_pct: number;
+    top_category_name: string;
+    top_category_share_pct: number;
+  };
+};
+
 export async function fetchAnalyticsSummary(params: {
   companyId: number;
   role: "supplier" | "buyer";
@@ -30,4 +47,24 @@ export async function fetchAnalyticsSummary(params: {
   qs.set("role", params.role);
   if (params.days) qs.set("days", String(params.days));
   return api<AnalyticsSummary>(`/analytics/summary/?${qs.toString()}`, { auth: true });
+}
+
+export async function queryAnalyticsAssistant(params: {
+  companyId: number;
+  role: "supplier" | "buyer";
+  question: string;
+  days?: number;
+  selectedMonth?: string | null;
+}) {
+  return api<AnalyticsAssistantResponse>("/analytics/assistant/query", {
+    method: "POST",
+    auth: true,
+    body: {
+      company_id: params.companyId,
+      role: params.role,
+      question: params.question,
+      days: params.days ?? 365,
+      selected_month: params.selectedMonth ?? null,
+    },
+  });
 }

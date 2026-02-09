@@ -37,7 +37,6 @@ export default function HomeScreen({
   active,
   cartCount,
   onBurger,
-  onSearch,
   onAdd,
   showCompanyBanner = false,
   onPickCompany,
@@ -45,18 +44,19 @@ export default function HomeScreen({
   active: boolean;
   cartCount: number;
   onBurger: () => void;
-  onSearch: () => void;
   onAdd: (product: Product) => void;
   showCompanyBanner?: boolean;
   onPickCompany?: () => void;
 }) {
   const [category, setCategory] = useState<Category>("meat");
+  const [query, setQuery] = useState("");
   // FastAPI ожидает category как ID (number). Пока маппим все food-категории на 1.
   const categoryId = 1;
   const { products, loading } = useProducts(categoryId, "");
 
   // === infinite categories strip (loop) ===
   const categoriesRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const loopItems = useMemo(() => {
     const base = [{ kind: "search" as const }, ...CATEGORIES.map((c) => ({ kind: "cat" as const, ...c }))];
@@ -91,6 +91,16 @@ export default function HomeScreen({
     return out;
   }, [products]);
 
+  const filteredProducts = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return displayProducts;
+    return displayProducts.filter((p) => {
+      const name = String(p.name ?? "").toLowerCase();
+      const seller = String(p.seller ?? "").toLowerCase();
+      return name.includes(q) || seller.includes(q);
+    });
+  }, [displayProducts, query]);
+
   return (
     <section id="screen-home" className={`screen ${active ? "active" : ""}`}>
       <TopHeader onBurger={onBurger} badgeCount={cartCount} />
@@ -112,11 +122,32 @@ export default function HomeScreen({
           <img src="/media/usc.svg" alt="USC" className="logo" />
         </div>
 
+        <div className="search-box home-inline-search">
+          <button className="icon-button" type="button" aria-label="Поиск">
+            <img src="/media/search.png" alt="Поиск" />
+          </button>
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Искать товар или поставщика"
+          />
+          <button className="clear-search" type="button" onClick={() => setQuery("")} aria-label="Очистить">
+            ×
+          </button>
+        </div>
+
         <div className="categories" ref={categoriesRef}>
           {loopItems.map((item, idx) => {
             if (item.kind === "search") {
               return (
-                <button key={`search-${idx}`} className="category category-search" type="button" onClick={onSearch}>
+                <button
+                  key={`search-${idx}`}
+                  className="category category-search"
+                  type="button"
+                  onClick={() => searchInputRef.current?.focus()}
+                >
                   <img src="/media/search.png" alt="Поиск" style={{ width: 40, height: 40, borderRadius: 999 }} />
                 </button>
               );
@@ -158,8 +189,10 @@ export default function HomeScreen({
                 <ProductCardSkeleton key={i} />
               ))}
             </>
+          ) : filteredProducts.length === 0 ? (
+            <div className="search-empty">Ничего не найдено. Попробуйте другой запрос.</div>
           ) : (
-            displayProducts.map((p, idx) => <ProductCard key={`${p.id}-${idx}`} product={p} onAdd={() => onAdd(p)} />)
+            filteredProducts.map((p, idx) => <ProductCard key={`${p.id}-${idx}`} product={p} onAdd={() => onAdd(p)} />)
           )}
         </div>
       </div>

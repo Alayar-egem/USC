@@ -30,6 +30,11 @@ class Settings(BaseSettings):
     SMTP_STARTTLS: bool = True
     SMTP_USE_SSL: bool = False
 
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+    OPENAI_TIMEOUT_SECONDS: float = 20.0
+
     model_config = SettingsConfigDict(
         env_file=str(BASE_DIR / ".env"),
         extra="ignore",

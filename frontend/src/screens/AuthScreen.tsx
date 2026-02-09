@@ -3,6 +3,15 @@ import { login, registerEmail, requestEmailCode, requestPhoneCode, verifyPhoneCo
 
 type Role = "buyer" | "supplier";
 
+const TEST_ACCOUNTS = [
+  { email: "buyer1@usc.demo", password: "demo123456", role: "Покупатель", sales: 0, purchases: 1052 },
+  { email: "buyer2@usc.demo", password: "demo123456", role: "Покупатель", sales: 0, purchases: 1141 },
+  { email: "supplier1@usc.demo", password: "demo123456", role: "Поставщик", sales: 133, purchases: 0 },
+  { email: "supplier2@usc.demo", password: "demo123456", role: "Поставщик", sales: 132, purchases: 0 },
+  { email: "supplier3@usc.demo", password: "demo123456", role: "Поставщик", sales: 962, purchases: 0 },
+  { email: "supplier4@usc.demo", password: "demo123456", role: "Поставщик", sales: 966, purchases: 0 },
+] as const;
+
 export default function AuthScreen({ onSuccess }: { onSuccess: () => void }) {
   const [method, setMethod] = useState<"email" | "phone">("email");
   const [emailMode, setEmailMode] = useState<"login" | "register">("login");
@@ -374,6 +383,26 @@ export default function AuthScreen({ onSuccess }: { onSuccess: () => void }) {
         </div>
 
         {msg && <div className="auth-msg">{msg}</div>}
+
+        <div className="auth-test-box">
+          <div className="auth-test-title">Тестовые аккаунты (временно)</div>
+          <div className="auth-test-subtitle">Для быстрого входа и проверки аналитики. Потом удалим.</div>
+          <div className="auth-test-list">
+            {TEST_ACCOUNTS.map((x) => (
+              <div key={x.email} className="auth-test-item">
+                <div className="auth-test-main">
+                  <div className="auth-test-email">{x.email}</div>
+                  <div className="auth-test-pass">{`Пароль: ${x.password}`}</div>
+                </div>
+                <div className="auth-test-meta">
+                  <span>{x.role}</span>
+                  <span>{`Продажи: ${x.sales}`}</span>
+                  {x.purchases > 0 ? <span>{`Покупки: ${x.purchases}`}</span> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </section>
   );

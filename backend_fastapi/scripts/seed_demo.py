@@ -228,6 +228,22 @@ def main() -> None:
             last_name="Supplier",
             phone="+996700000102",
         )
+        supplier_3 = ensure_user(
+            db,
+            email="supplier3@usc.demo",
+            password="demo123456",
+            first_name="Arsen",
+            last_name="Supplier",
+            phone="+996700000103",
+        )
+        supplier_4 = ensure_user(
+            db,
+            email="supplier4@usc.demo",
+            password="demo123456",
+            first_name="Mira",
+            last_name="Supplier",
+            phone="+996700000104",
+        )
 
         # Companies
         buyer_co_1 = ensure_company(
@@ -258,11 +274,27 @@ def main() -> None:
             phone="+996312200002",
             address="Bishkek, Logistika 8",
         )
+        supplier_co_3 = ensure_company(
+            db,
+            name="Green Valley Agro",
+            company_type="SUPPLIER",
+            phone="+996312200003",
+            address="Sokuluk, Farm line 12",
+        )
+        supplier_co_4 = ensure_company(
+            db,
+            name="NorthPeak Foods",
+            company_type="SUPPLIER",
+            phone="+996312200004",
+            address="Bishkek, East warehouse 3",
+        )
 
         ensure_membership(db, user_id=buyer_1, company_id=buyer_co_1)
         ensure_membership(db, user_id=buyer_2, company_id=buyer_co_2)
         ensure_membership(db, user_id=supplier_1, company_id=supplier_co_1)
         ensure_membership(db, user_id=supplier_2, company_id=supplier_co_2)
+        ensure_membership(db, user_id=supplier_3, company_id=supplier_co_3)
+        ensure_membership(db, user_id=supplier_4, company_id=supplier_co_4)
 
         # Categories
         cat_meat = ensure_category(db, "Meat")
@@ -281,6 +313,14 @@ def main() -> None:
         p6 = ensure_product(db, supplier_company_id=supplier_co_2, category_id=cat_fish, name="Trout Fresh", price=Decimal("920"))
         p7 = ensure_product(db, supplier_company_id=supplier_co_2, category_id=cat_grain, name="Rice Long Grain", price=Decimal("75"))
         p8 = ensure_product(db, supplier_company_id=supplier_co_2, category_id=cat_grain, name="Buckwheat", price=Decimal("88"))
+        p9 = ensure_product(db, supplier_company_id=supplier_co_3, category_id=cat_fruit, name="Apples Gala", price=Decimal("92"))
+        p10 = ensure_product(db, supplier_company_id=supplier_co_3, category_id=cat_fruit, name="Bananas Premium", price=Decimal("118"))
+        p11 = ensure_product(db, supplier_company_id=supplier_co_3, category_id=cat_milk, name="Yogurt Natural", price=Decimal("84"), unit="pcs")
+        p12 = ensure_product(db, supplier_company_id=supplier_co_3, category_id=cat_bread, name="Corn Bread", price=Decimal("42"), unit="pcs")
+        p13 = ensure_product(db, supplier_company_id=supplier_co_4, category_id=cat_meat, name="Chicken Fillet", price=Decimal("420"))
+        p14 = ensure_product(db, supplier_company_id=supplier_co_4, category_id=cat_meat, name="Turkey Breast", price=Decimal("610"))
+        p15 = ensure_product(db, supplier_company_id=supplier_co_4, category_id=cat_grain, name="Oat Flakes", price=Decimal("96"))
+        p16 = ensure_product(db, supplier_company_id=supplier_co_4, category_id=cat_fish, name="Mackerel", price=Decimal("540"))
 
         # Orders: dense monthly dataset for rich analytics (12 months x many orders)
         catalog = {
@@ -347,6 +387,67 @@ def main() -> None:
                 ensure_delivery(db, order_id=oid, status=delivery_status, notes=f"Demo delivery for {comment}")
                 created_count += 1
 
+        # New suppliers only: separate stream with stronger monthly dynamics.
+        # Existing suppliers/orders above stay untouched.
+        catalog_new = {
+            "greenvalley": [p9, p10, p11, p12],
+            "northpeak": [p13, p14, p15, p16],
+        }
+        pairs_new = [
+            (buyer_co_1, supplier_co_3, "greenvalley"),
+            (buyer_co_2, supplier_co_3, "greenvalley"),
+            (buyer_co_1, supplier_co_4, "northpeak"),
+            (buyer_co_2, supplier_co_4, "northpeak"),
+        ]
+        # 2000 new orders across 12 months from NEW suppliers only.
+        month_volume_new = [100, 116, 124, 140, 148, 158, 168, 180, 190, 210, 224, 242]
+
+        for month_idx in range(12):
+            month_base = NOW - timedelta(days=(11 - month_idx) * 30)
+            volume = month_volume_new[month_idx]
+            for i in range(volume):
+                buyer_id, supplier_id, key = pairs_new[(i * 2 + month_idx) % len(pairs_new)]
+                products_pack = catalog_new[key]
+                p_a = products_pack[(i + month_idx) % len(products_pack)]
+                p_b = products_pack[(i + month_idx + 2) % len(products_pack)]
+                q_a = Decimal(str(8 + ((i * 4 + month_idx) % 20)))
+                q_b = Decimal(str(5 + ((i * 6 + month_idx) % 18)))
+
+                if i < volume - 3:
+                    status = "DELIVERED"
+                elif i == volume - 3:
+                    status = "DELIVERING"
+                elif i == volume - 2:
+                    status = "CONFIRMED"
+                else:
+                    status = "PENDING"
+
+                mode = ["SUPPLIER_COURIER", "BUYER_COURIER", "YANDEX"][(i + month_idx + 1) % 3]
+                created_at = month_base + timedelta(days=(i % 26), hours=(i * 3) % 24, minutes=(i * 11) % 60)
+                comment = f"DEMO-NEW-M{month_idx + 1:02d}-O{i + 1:03d}"
+
+                oid = ensure_order(
+                    db,
+                    buyer_company_id=buyer_id,
+                    supplier_company_id=supplier_id,
+                    status=status,
+                    created_at=created_at,
+                    delivery_mode=mode,
+                    comment=comment,
+                    item_rows=[(p_a, q_a), (p_b, q_b)],
+                )
+
+                delivery_status = "ASSIGNED"
+                if status == "DELIVERED":
+                    delivery_status = "DELIVERED"
+                elif status == "DELIVERING":
+                    delivery_status = "ON_THE_WAY"
+                elif status == "CONFIRMED":
+                    delivery_status = "PICKED_UP"
+
+                ensure_delivery(db, order_id=oid, status=delivery_status, notes=f"Demo delivery for {comment}")
+                created_count += 1
+
         db.commit()
 
         print("Demo data seeded successfully.")
@@ -356,6 +457,8 @@ def main() -> None:
         print("  buyer2@usc.demo / demo123456")
         print("  supplier1@usc.demo / demo123456")
         print("  supplier2@usc.demo / demo123456")
+        print("  supplier3@usc.demo / demo123456")
+        print("  supplier4@usc.demo / demo123456")
     except Exception:
         db.rollback()
         raise
