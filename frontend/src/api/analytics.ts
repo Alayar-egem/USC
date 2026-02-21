@@ -18,6 +18,34 @@ export type AnalyticsSummary = {
   category_breakdown: Array<{ name: string; revenue: number; share_pct: number }>;
   status_funnel: Array<{ status: string; count: number }>;
   insights: string[];
+  buyer_recommendations?: {
+    cheaper_alternatives: Array<{
+      anchor_product_id: number;
+      anchor_product_name: string;
+      anchor_supplier_company_id: number;
+      anchor_supplier_name: string;
+      anchor_price: number;
+      candidate_product_id: number;
+      candidate_product_name: string;
+      candidate_supplier_company_id: number;
+      candidate_supplier_name: string;
+      candidate_price: number;
+      unit: string;
+      savings_abs: number;
+      savings_pct: number;
+      rationale: string;
+    }>;
+    reliable_suppliers: Array<{
+      supplier_company_id: number;
+      supplier_name: string;
+      score: number;
+      delivery_rate_pct: number;
+      cancel_rate_pct: number;
+      repeat_share_pct: number;
+      delivered_orders: number;
+    }>;
+    generated_at: string;
+  };
 };
 
 export type AnalyticsAssistantResponse = {

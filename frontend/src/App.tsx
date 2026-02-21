@@ -35,6 +35,10 @@ function hashSeed(input: string): number {
   return h;
 }
 
+function normalizeRole(input?: string | null): "buyer" | "supplier" {
+  return String(input || "").toLowerCase() === "supplier" ? "supplier" : "buyer";
+}
+
 export default function App() {
   const toast = useToast();
   const initialAuthed = !!localStorage.getItem("usc_access_token");
@@ -54,6 +58,7 @@ export default function App() {
     const num = Number(raw);
     return Number.isFinite(num) ? num : null;
   });
+  const [appRole, setAppRole] = useState<"buyer" | "supplier">(() => normalizeRole(localStorage.getItem("usc_app_role")));
 
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [focusOrderId, setFocusOrderId] = useState<number | null>(null);
@@ -164,9 +169,14 @@ export default function App() {
     }
   }, [drawerScreen]);
 
+  useEffect(() => {
+    localStorage.setItem("usc_app_role", appRole);
+  }, [appRole]);
+
   const cart = useCart();
   const cartItems = useMemo(() => cart.items, [cart.items]);
   const currentCompany = profile?.companies?.find((c) => c.company_id === companyId) ?? null;
+  const currentCompanyType = String(currentCompany?.company_type || "").toUpperCase();
   const currentCompanyName = currentCompany?.name ?? null;
   const reputation = useMemo(() => {
     const seedSource = `${profile?.email ?? ""}|${profile?.role ?? ""}|${currentCompanyName ?? ""}`;
@@ -180,6 +190,13 @@ export default function App() {
       completedOrders,
     };
   }, [profile?.email, profile?.role, currentCompanyName]);
+
+  useEffect(() => {
+    if (!profile) return;
+    const companyBasedRole = currentCompanyType === "SUPPLIER" ? "supplier" : currentCompanyType === "BUYER" ? "buyer" : null;
+    const savedRole = normalizeRole(localStorage.getItem("usc_app_role"));
+    setAppRole(companyBasedRole ?? savedRole ?? normalizeRole(profile.role));
+  }, [profile, currentCompanyType]);
 
   function addToCart(product: Product) {
     cart.add(product);
@@ -203,6 +220,7 @@ export default function App() {
     clearAuth();
     localStorage.removeItem("usc_company_id");
     localStorage.removeItem("usc_company_name");
+    localStorage.removeItem("usc_app_role");
     setAuthed(false);
     setProfile(null);
     setCompanyId(null);
@@ -333,7 +351,8 @@ export default function App() {
         onLogout={handleLogout}
         onSwitchCompany={() => setCompanyPickerOpen(true)}
         companyName={currentCompanyName}
-        role={profile?.role ?? null}
+        role={appRole}
+        onRoleChange={setAppRole}
         notificationCount={notificationCount}
         ratingValue={reputation.rating}
         reviewCount={reputation.reviews}
@@ -364,7 +383,7 @@ export default function App() {
           active={!screensLocked && activeTab === "analytics"}
           cartCount={cart.count}
           onBurger={openDrawer}
-          role={profile?.role ?? null}
+          role={appRole}
           companyId={companyId}
           showCompanyBanner={!!needsCompany}
           onPickCompany={() => setCompanyPickerOpen(true)}
@@ -375,7 +394,7 @@ export default function App() {
           cartCount={cart.count}
           onBurger={openDrawer}
           onNotify={toast.show}
-          role={profile?.role ?? null}
+          role={appRole}
           companyId={companyId}
           showCompanyBanner={!!needsCompany}
           onPickCompany={() => setCompanyPickerOpen(true)}
@@ -425,7 +444,7 @@ export default function App() {
           onBurger={openDrawer}
           onBack={() => setOrdersOpen(false)}
           buyerCompanyId={companyId}
-          role={profile?.role ?? null}
+          role={appRole}
           onOpenNotifications={() => openDrawerScreen("notifications")}
           notificationCount={notificationCount}
           focusOrderId={focusOrderId}
@@ -460,7 +479,7 @@ export default function App() {
           onBurger={openDrawer}
           onOpenNotifications={() => openDrawerScreen("notifications")}
           notificationCount={notificationCount}
-          role={profile?.role ?? null}
+          role={appRole}
           onOpenOrder={openOrderFromNotification}
           onNotify={toast.show}
         />

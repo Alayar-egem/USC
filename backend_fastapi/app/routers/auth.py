@@ -13,6 +13,7 @@ from app.db.deps import get_db
 from app.db.schema import accounts_user as users
 from app.db.schema import companies_company as companies
 from app.db.schema import companies_companymember as company_members
+from app.core.config import settings
 from app.utils.auth import create_access_token, create_refresh_token, make_legacy_password, verify_legacy_password
 from app.utils.emailer import can_send, send_email
 
@@ -171,6 +172,22 @@ PHONE_CODES: dict[str, tuple[str, datetime]] = {}
 EMAIL_CODES: dict[str, tuple[str, datetime]] = {}
 
 
+def _code_expires_at() -> datetime:
+    ttl = max(60, int(settings.EMAIL_CODE_EXPIRES_SECONDS or 300))
+    return datetime.now(timezone.utc) + timedelta(seconds=ttl)
+
+
+def _code_length() -> int:
+    return max(4, min(8, int(settings.EMAIL_CODE_LENGTH or 6)))
+
+
+def _generate_code() -> str:
+    digits = _code_length()
+    min_val = 10 ** (digits - 1)
+    max_val = (10**digits) - 1
+    return str(secrets.randbelow(max_val - min_val + 1) + min_val)
+
+
 @router.post("/login/", response_model=TokenPair)
 def login(payload: LoginPayload, db: Session = Depends(get_db)):
     if not _is_valid_email(payload.email):
@@ -313,10 +330,11 @@ def phone_request(payload: PhoneRequestPayload):
     if not phone or len(phone) < 6:
         raise HTTPException(400, detail="Invalid phone")
 
-    code = f"{secrets.randbelow(900000) + 100000}"
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    code = _generate_code()
+    expires_at = _code_expires_at()
     PHONE_CODES[phone] = (code, expires_at)
-    return PhoneRequestResponse(sent=True, code=code, expires_in=300)
+    expires_in = max(60, int(settings.EMAIL_CODE_EXPIRES_SECONDS or 300))
+    return PhoneRequestResponse(sent=True, code=code, expires_in=expires_in)
 
 
 @router.post("/phone/verify/", response_model=TokenPair)
@@ -432,17 +450,24 @@ def email_request(payload: EmailRequestPayload):
     if not _is_valid_email(email):
         raise HTTPException(400, detail="Invalid email")
 
-    code = f"{secrets.randbelow(900000) + 100000}"
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    code = _generate_code()
+    expires_at = _code_expires_at()
     EMAIL_CODES[email] = (code, expires_at)
+    expires_in = max(60, int(settings.EMAIL_CODE_EXPIRES_SECONDS or 300))
     if can_send():
-        send_email(
-            email,
-            subject="USC verification code",
-            text=f"Your USC verification code: {code}\nValid for 5 minutes.",
-        )
-        return PhoneRequestResponse(sent=True, code=None, expires_in=300)
-    return PhoneRequestResponse(sent=True, code=code, expires_in=300)
+        try:
+            send_email(
+                email,
+                subject="USC verification code",
+                text=f"Your USC verification code: {code}\nValid for {expires_in // 60} minutes.",
+            )
+            return PhoneRequestResponse(sent=True, code=None, expires_in=expires_in)
+        except Exception:
+            raise HTTPException(502, detail="Failed to send email code")
+
+    if settings.EMAIL_CODE_DEV_FALLBACK:
+        return PhoneRequestResponse(sent=True, code=code, expires_in=expires_in)
+    raise HTTPException(503, detail="Email provider is not configured")
 
 
 @router.post("/email/verify/", response_model=TokenPair)

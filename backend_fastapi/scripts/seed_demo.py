@@ -393,20 +393,21 @@ def main() -> None:
             "greenvalley": [p9, p10, p11, p12],
             "northpeak": [p13, p14, p15, p16],
         }
-        pairs_new = [
-            (buyer_co_1, supplier_co_3, "greenvalley"),
-            (buyer_co_2, supplier_co_3, "greenvalley"),
-            (buyer_co_1, supplier_co_4, "northpeak"),
-            (buyer_co_2, supplier_co_4, "northpeak"),
-        ]
         # 2000 new orders across 12 months from NEW suppliers only.
         month_volume_new = [100, 116, 124, 140, 148, 158, 168, 180, 190, 210, 224, 242]
 
         for month_idx in range(12):
             month_base = NOW - timedelta(days=(11 - month_idx) * 30)
             volume = month_volume_new[month_idx]
+            buyer1_share = 0.65
+            buyer1_volume = int(volume * buyer1_share)
             for i in range(volume):
-                buyer_id, supplier_id, key = pairs_new[(i * 2 + month_idx) % len(pairs_new)]
+                buyer_id = buyer_co_1 if i < buyer1_volume else buyer_co_2
+                supplier_slot = (i + month_idx) % 2
+                if supplier_slot == 0:
+                    supplier_id, key = supplier_co_3, "greenvalley"
+                else:
+                    supplier_id, key = supplier_co_4, "northpeak"
                 products_pack = catalog_new[key]
                 p_a = products_pack[(i + month_idx) % len(products_pack)]
                 p_b = products_pack[(i + month_idx + 2) % len(products_pack)]

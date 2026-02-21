@@ -1,4 +1,4 @@
-﻿from pathlib import Path
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[2]  # backend_fastapi/
@@ -29,33 +29,14 @@ class Settings(BaseSettings):
     SMTP_FROM: str = ""
     SMTP_STARTTLS: bool = True
     SMTP_USE_SSL: bool = False
+    EMAIL_CODE_EXPIRES_SECONDS: int = 300
+    EMAIL_CODE_LENGTH: int = 6
+    EMAIL_CODE_DEV_FALLBACK: bool = True
 
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     OPENAI_TIMEOUT_SECONDS: float = 20.0
-    LLM_PROVIDER: str = "gemini"
-    GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-1.5-flash"
-    GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"
-    REDIS_URL: str = ""
-    REDIS_PREFIX: str = "usc"
-    REDIS_TIMEOUT_SECONDS: float = 1.5
-
-    CACHE_TTL_ANALYTICS_SUMMARY: int = 45
-    CACHE_TTL_ANALYTICS_INSIGHTS: int = 120
-    CACHE_TTL_ANALYTICS_ASSISTANT: int = 45
-    CACHE_TTL_CATEGORIES: int = 180
-    CACHE_TTL_PRODUCTS: int = 45
-    CACHE_TTL_SUPPLIERS: int = 60
-    CACHE_TTL_COMPANIES: int = 45
-    CACHE_TTL_MEMBERSHIPS: int = 45
-    CACHE_TTL_PROFILE_ME: int = 20
-    CACHE_TTL_NOTIFICATIONS: int = 20
-    CACHE_TTL_ORDERS_LIST: int = 20
-    CACHE_TTL_ORDER_DETAIL: int = 20
-    CACHE_TTL_ORDERS_BOX: int = 20
-    CACHE_TTL_DELIVERIES: int = 20
 
     model_config = SettingsConfigDict(
         env_file=str(BASE_DIR / ".env"),
@@ -63,4 +44,3 @@ class Settings(BaseSettings):
     )
 
 settings = Settings()
-

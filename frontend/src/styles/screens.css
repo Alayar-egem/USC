@@ -1,10 +1,10 @@
-﻿/* ===========================
+/* ===========================
    HOME
    =========================== */
 
 #screen-home {
   --home-chain-step: 240px;
-  padding: 14px 14px calc(var(--tabbar-space) + env(safe-area-inset-bottom));
+  padding: 14px 14px 0;
   background: transparent;
   position: relative;
   overflow: hidden;
@@ -621,7 +621,7 @@
 }
 
 .search-list li::before {
-  content: "рџ”Ќ";
+  content: "🔍";
   font-size: 14px;
 }
 
@@ -2020,6 +2020,30 @@
   color: #64748b;
 }
 
+.drawer-role-switch {
+  margin-top: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.drawer-role-btn {
+  min-height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.drawer-role-btn.active {
+  border-color: rgba(47, 102, 216, 0.35);
+  background: rgba(47, 102, 216, 0.12);
+  color: #1e3a8a;
+}
+
 .drawer-menu {
   display: flex;
   flex-direction: column;
@@ -2874,11 +2898,11 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 140px); /* С‡С‚РѕР±С‹ Р±РµР»С‹Р№ Р±Р»РѕРє РІРёР·СѓР°Р»СЊРЅРѕ С‚СЏРЅСѓР»СЃСЏ РІРЅРёР· */
+  min-height: calc(100vh - 140px); /* чтобы белый блок визуально тянулся вниз */
   margin-bottom: 50px;
 }
 
-/* top (РІРЅСѓС‚СЂРё РєР°СЂС‚РѕС‡РєРё) */
+/* top (внутри карточки) */
 .cart-top {
   padding: 18px 18px 10px;
 }
@@ -3822,7 +3846,7 @@
 }
 
 /* ===========================
-   SUPPLIERS вЂ” same style as your CSS
+   SUPPLIERS — same style as your CSS
    =========================== */
 
 .supplier-list {
@@ -3843,7 +3867,7 @@
   justify-content: space-between;
   gap: 10px;
 
-  min-width: 0; /* РІР°Р¶РЅРѕ С‡С‚РѕР±С‹ ellipsis СЂР°Р±РѕС‚Р°Р» */
+  min-width: 0; /* важно чтобы ellipsis работал */
 }
 
 .supplier-left {
@@ -3875,7 +3899,7 @@
 }
 
 .supplier-name {
-  font-weight: 700;           /* РєР°Рє РѕР±С‰РёР№ РІР°Р№Р± Сѓ С‚РµР±СЏ */
+  font-weight: 700;           /* как общий вайб у тебя */
   font-size: 13px;
   color: #111827;
   line-height: 1.15;
@@ -3893,7 +3917,7 @@
   text-overflow: ellipsis;
 }
 
-/* РєРЅРѕРїРєР° РІ С‚РѕС‡РЅРѕСЃС‚Рё РєР°Рє С‚РІРѕР№ .primary-button */
+/* кнопка в точности как твой .primary-button */
 .supplier-open {
   border: none;
   border-radius: 999px;
@@ -3910,7 +3934,7 @@
   transform: scale(0.98);
 }
 
-/* ===== responsive РІ С‚РІРѕС‘Рј СЃС‚РёР»Рµ ===== */
+/* ===== responsive в твоём стиле ===== */
 @media (max-width: 360px) {
   .supplier-card {
     padding: 9px 10px;
@@ -3942,7 +3966,7 @@
 }
 
 
-/* РїРѕР»СЏ */
+/* поля */
 .field {
   display: flex;
   flex-direction: column;
@@ -3978,7 +4002,7 @@ textarea.field-input {
   line-height: 1.35;
 }
 
-/* РёС‚РѕРіРѕ */
+/* итого */
 .modal-total {
   margin-top: 2px;
   padding: 10px 12px;
@@ -3995,7 +4019,7 @@ textarea.field-input {
   font-size: 14px;
 }
 
-/* primary button вЂ” РєР°Рє С‚РІРѕР№ .primary-button */
+/* primary button — как твой .primary-button */
 .modal-primary {
   margin-top: 2px;
   width: 100%;
@@ -4020,12 +4044,12 @@ textarea.field-input {
 }
 
 /* ===========================
-   RESPONSIVE вЂ” in your style
+   RESPONSIVE — in your style
    =========================== */
 
 @media (min-width: 421px) {
   .modal-backdrop {
-    align-items: center; /* РЅР° Р±РѕР»СЊС€РёС… СЌРєСЂР°РЅР°С… РїРѕ С†РµРЅС‚СЂСѓ */
+    align-items: center; /* на больших экранах по центру */
   }
 }
 
@@ -4482,6 +4506,50 @@ textarea.field-input {
 .auth-subtitle {
   font-size: 12px;
   color: var(--muted);
+}
+
+.auth-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  background: #eaf0fb;
+  padding: 6px;
+  border-radius: 999px;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-mode-tabs::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  width: calc(50% - 10px);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #2f66d8, #1f3c88);
+  transform: translateX(0);
+  transition: transform 0.3s ease;
+  z-index: 0;
+}
+
+.auth-mode-tabs.is-register::before {
+  transform: translateX(calc(100% + 8px));
+}
+
+.auth-mode-tab {
+  border: none;
+  background: transparent;
+  padding: 9px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  color: #466186;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-mode-tab.active {
+  color: #ffffff;
 }
 
 .auth-tabs {
@@ -5689,12 +5757,108 @@ textarea.field-input {
   gap: 6px;
 }
 
+.buyer-reco-list {
+  display: grid;
+  gap: 8px;
+}
+
+.buyer-reco-item {
+  background: linear-gradient(180deg, #f7f9ff 0%, #f1f5ff 100%);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.buyer-reco-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.buyer-reco-product {
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.buyer-reco-save {
+  font-size: 11px;
+  font-weight: 800;
+  color: #047857;
+  background: rgba(16, 185, 129, 0.14);
+  border-radius: 999px;
+  padding: 3px 7px;
+}
+
+.buyer-reco-route {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #42546e;
+}
+
+.buyer-reco-arrow {
+  font-weight: 900;
+  color: #2f66d8;
+}
+
+.buyer-reco-note {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.supplier-health-list {
+  display: grid;
+  gap: 8px;
+}
+
+.supplier-health-item {
+  background: linear-gradient(180deg, #f7f9ff 0%, #f1f5ff 100%);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.supplier-health-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.supplier-health-name {
+  font-size: 12px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.supplier-health-score {
+  font-size: 11px;
+  font-weight: 800;
+  color: #1e3a8a;
+  background: rgba(47, 102, 216, 0.14);
+  border-radius: 999px;
+  padding: 3px 7px;
+}
+
+.supplier-health-metrics {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 11px;
+  color: #4b5f7e;
+}
+
 /* ===========================
    AI CHAT TAB
    =========================== */
 
 #screen-ai {
-  padding: 14px 14px calc(var(--tabbar-space) + env(safe-area-inset-bottom));
+  padding: 14px 14px 0;
 }
 
 #screen-profile {
@@ -6733,4 +6897,3 @@ textarea.field-input {
   font-size: 12px;
   color: #6b7280;
 }
-

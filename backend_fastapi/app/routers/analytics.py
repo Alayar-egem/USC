@@ -4,6 +4,8 @@ from datetime import date, datetime, timedelta, timezone
 import json
 import threading
 from typing import Optional
+from urllib import request as urlrequest
+from urllib.error import HTTPError, URLError
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -11,9 +13,6 @@ from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.constants import POLICY_VIOLATION_RU
-from app.cache.redis_cache import get_json, make_key, set_json, stable_hash
-from app.services.llm import llm_chat_json, llm_policy_check
 from app.deps.auth import get_current_user
 from app.db.deps import get_db
 from app.db.schema import accounts_user as users
@@ -30,26 +29,6 @@ _INSIGHTS_CACHE_TTL_SECONDS = 600
 _INSIGHTS_CACHE_LOCK = threading.Lock()
 _INSIGHTS_CACHE: dict[tuple[int, str, int], tuple[datetime, list[str]]] = {}
 
-
-
-
-class AnalyticsAssistantMetrics(BaseModel):
-    mom_pct: float | None = None
-    delivery_rate_pct: float = 0.0
-    cancel_rate_pct: float = 0.0
-    market_share_pct: float = 0.0
-    top_category_name: str = "?"
-    top_category_share_pct: float = 0.0
-
-
-class AnalyticsAssistantOut(BaseModel):
-    summary: str
-    probable_causes: list[str]
-    actions: list[str]
-    confidence: float
-    focus_month: str | None = None
-    show_metrics: bool = True
-    metrics: AnalyticsAssistantMetrics
 
 class AnalyticsAssistantRequest(BaseModel):
     company_id: int = Field(..., ge=1)
@@ -94,62 +73,80 @@ def _assistant_answer(summary: dict, question: str, selected_month: str | None) 
     cancel_rate = (cancelled / total) * 100 if total else 0.0
 
     top_cat = categories[0] if categories else None
-    top_cat_name = str(top_cat.get("name")) if top_cat else "—"
+    top_cat_name = str(top_cat.get("name")) if top_cat else "вЂ”"
     top_cat_share = float(top_cat.get("share_pct") or 0) if top_cat else 0.0
     share = float(market_info.get("company_share_pct") or 0)
 
     probable_causes: list[str] = []
     actions: list[str] = []
+    buyer_recommendations = summary.get("buyer_recommendations") or {}
+    cheaper_alternatives = buyer_recommendations.get("cheaper_alternatives") or []
+    reliable_suppliers = buyer_recommendations.get("reliable_suppliers") or []
 
     if mom is not None and mom <= -10:
         probable_causes.append(
-            f"Выручка за последний месяц снизилась на {abs(mom):.1f}% к предыдущему периоду, это основной драйвер просадки."
+            f"Р’С‹СЂСѓС‡РєР° Р·Р° РїРѕСЃР»РµРґРЅРёР№ РјРµСЃСЏС† СЃРЅРёР·РёР»Р°СЃСЊ РЅР° {abs(mom):.1f}% Рє РїСЂРµРґС‹РґСѓС‰РµРјСѓ РїРµСЂРёРѕРґСѓ, СЌС‚Рѕ РѕСЃРЅРѕРІРЅРѕР№ РґСЂР°Р№РІРµСЂ РїСЂРѕСЃР°РґРєРё."
         )
-        actions.append("Запустить короткое промо на 7-10 дней по топ-2 SKU для возврата объема.")
+        actions.append("Р—Р°РїСѓСЃС‚РёС‚СЊ РєРѕСЂРѕС‚РєРѕРµ РїСЂРѕРјРѕ РЅР° 7-10 РґРЅРµР№ РїРѕ С‚РѕРї-2 SKU РґР»СЏ РІРѕР·РІСЂР°С‚Р° РѕР±СЉРµРјР°.")
     elif mom is not None and mom >= 8:
-        probable_causes.append(f"Наблюдается сильный рост MoM: +{mom:.1f}%, спрос ускоряется.")
-        actions.append("Увеличить страховой остаток по лидирующим SKU, чтобы не потерять рост из-за out-of-stock.")
+        probable_causes.append(f"РќР°Р±Р»СЋРґР°РµС‚СЃСЏ СЃРёР»СЊРЅС‹Р№ СЂРѕСЃС‚ MoM: +{mom:.1f}%, СЃРїСЂРѕСЃ СѓСЃРєРѕСЂСЏРµС‚СЃСЏ.")
+        actions.append("РЈРІРµР»РёС‡РёС‚СЊ СЃС‚СЂР°С…РѕРІРѕР№ РѕСЃС‚Р°С‚РѕРє РїРѕ Р»РёРґРёСЂСѓСЋС‰РёРј SKU, С‡С‚РѕР±С‹ РЅРµ РїРѕС‚РµСЂСЏС‚СЊ СЂРѕСЃС‚ РёР·-Р·Р° out-of-stock.")
     else:
-        probable_causes.append("Изменение по месяцу умеренное, вероятнее всего это нормальная рыночная флуктуация.")
-        actions.append("Поддерживать текущий прайс и контролировать подтверждение заказов в пиковые дни.")
+        probable_causes.append("РР·РјРµРЅРµРЅРёРµ РїРѕ РјРµСЃСЏС†Сѓ СѓРјРµСЂРµРЅРЅРѕРµ, РІРµСЂРѕСЏС‚РЅРµРµ РІСЃРµРіРѕ СЌС‚Рѕ РЅРѕСЂРјР°Р»СЊРЅР°СЏ СЂС‹РЅРѕС‡РЅР°СЏ С„Р»СѓРєС‚СѓР°С†РёСЏ.")
+        actions.append("РџРѕРґРґРµСЂР¶РёРІР°С‚СЊ С‚РµРєСѓС‰РёР№ РїСЂР°Р№СЃ Рё РєРѕРЅС‚СЂРѕР»РёСЂРѕРІР°С‚СЊ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ Р·Р°РєР°Р·РѕРІ РІ РїРёРєРѕРІС‹Рµ РґРЅРё.")
 
     if cancel_rate >= 10:
-        probable_causes.append(f"Высокая доля отмен ({cancel_rate:.1f}%) съедает часть выручки.")
-        actions.append("Поставить SLA на подтверждение заказа до 30 минут и мониторить долю отмен ежедневно.")
+        probable_causes.append(f"Р’С‹СЃРѕРєР°СЏ РґРѕР»СЏ РѕС‚РјРµРЅ ({cancel_rate:.1f}%) СЃСЉРµРґР°РµС‚ С‡Р°СЃС‚СЊ РІС‹СЂСѓС‡РєРё.")
+        actions.append("РџРѕСЃС‚Р°РІРёС‚СЊ SLA РЅР° РїРѕРґС‚РІРµСЂР¶РґРµРЅРёРµ Р·Р°РєР°Р·Р° РґРѕ 30 РјРёРЅСѓС‚ Рё РјРѕРЅРёС‚РѕСЂРёС‚СЊ РґРѕР»СЋ РѕС‚РјРµРЅ РµР¶РµРґРЅРµРІРЅРѕ.")
     if delivery_rate < 70:
-        probable_causes.append(f"Низкий delivery rate ({delivery_rate:.1f}%) ограничивает реализацию спроса.")
-        actions.append("Усилить контроль этапов CONFIRMED/DELIVERING, чтобы закрывать больше заказов в DELIVERED.")
+        probable_causes.append(f"РќРёР·РєРёР№ delivery rate ({delivery_rate:.1f}%) РѕРіСЂР°РЅРёС‡РёРІР°РµС‚ СЂРµР°Р»РёР·Р°С†РёСЋ СЃРїСЂРѕСЃР°.")
+        actions.append("РЈСЃРёР»РёС‚СЊ РєРѕРЅС‚СЂРѕР»СЊ СЌС‚Р°РїРѕРІ CONFIRMED/DELIVERING, С‡С‚РѕР±С‹ Р·Р°РєСЂС‹РІР°С‚СЊ Р±РѕР»СЊС€Рµ Р·Р°РєР°Р·РѕРІ РІ DELIVERED.")
 
     if top_cat_share >= 55:
-        probable_causes.append(f"Выручка сильно сконцентрирована в категории «{top_cat_name}» ({top_cat_share:.1f}%).")
-        actions.append("Диверсифицировать ассортимент: добавить 2-3 SKU из второй по доле категории.")
+        probable_causes.append(f"Р’С‹СЂСѓС‡РєР° СЃРёР»СЊРЅРѕ СЃРєРѕРЅС†РµРЅС‚СЂРёСЂРѕРІР°РЅР° РІ РєР°С‚РµРіРѕСЂРёРё В«{top_cat_name}В» ({top_cat_share:.1f}%).")
+        actions.append("Р”РёРІРµСЂСЃРёС„РёС†РёСЂРѕРІР°С‚СЊ Р°СЃСЃРѕСЂС‚РёРјРµРЅС‚: РґРѕР±Р°РІРёС‚СЊ 2-3 SKU РёР· РІС‚РѕСЂРѕР№ РїРѕ РґРѕР»Рµ РєР°С‚РµРіРѕСЂРёРё.")
     else:
-        actions.append("Сфокусировать рекламу на категориях с долей >20% для максимального ROMI.")
+        actions.append("РЎС„РѕРєСѓСЃРёСЂРѕРІР°С‚СЊ СЂРµРєР»Р°РјСѓ РЅР° РєР°С‚РµРіРѕСЂРёСЏС… СЃ РґРѕР»РµР№ >20% РґР»СЏ РјР°РєСЃРёРјР°Р»СЊРЅРѕРіРѕ ROMI.")
 
     if share < 3:
-        probable_causes.append(f"Доля компании на рынке пока низкая ({share:.2f}%).")
-        actions.append("Забрать долю через ценовой тест: -3% на флагманские товары в течение 2 недель.")
+        probable_causes.append(f"Р”РѕР»СЏ РєРѕРјРїР°РЅРёРё РЅР° СЂС‹РЅРєРµ РїРѕРєР° РЅРёР·РєР°СЏ ({share:.2f}%).")
+        actions.append("Р—Р°Р±СЂР°С‚СЊ РґРѕР»СЋ С‡РµСЂРµР· С†РµРЅРѕРІРѕР№ С‚РµСЃС‚: -3% РЅР° С„Р»Р°РіРјР°РЅСЃРєРёРµ С‚РѕРІР°СЂС‹ РІ С‚РµС‡РµРЅРёРµ 2 РЅРµРґРµР»СЊ.")
+
+    if str(summary.get("role") or "").lower() == "buyer":
+        if cheaper_alternatives:
+            alt = cheaper_alternatives[0]
+            actions.append(
+                f"Для {alt.get('anchor_product_name')} переключите часть закупок на "
+                f"{alt.get('candidate_supplier_name')} ({alt.get('candidate_product_name')}): "
+                f"экономия до {float(alt.get('savings_pct') or 0):.1f}%."
+            )
+        if reliable_suppliers:
+            top_supplier = reliable_suppliers[0]
+            actions.append(
+                f"Увеличьте долю заказов у {top_supplier.get('supplier_name')} "
+                f"(надежность {float(top_supplier.get('score') or 0):.1f}/100) для снижения операционного риска."
+            )
 
     if focus:
         fm = str(focus.get("month") or "")
         fv = float(focus.get("revenue") or 0)
-        focus_line = f"Фокус-месяц {fm}: выручка {fv:.0f}."
+        focus_line = f"Р¤РѕРєСѓСЃ-РјРµСЃСЏС† {fm}: РІС‹СЂСѓС‡РєР° {fv:.0f}."
     else:
-        focus_line = "Фокус-месяц не выбран."
+        focus_line = "Р¤РѕРєСѓСЃ-РјРµСЃСЏС† РЅРµ РІС‹Р±СЂР°РЅ."
 
     q = question.lower()
-    if "почему" in q:
+    if "РїРѕС‡РµРјСѓ" in q:
         summary_text = (
-            f"{focus_line} Ключевые факторы: динамика MoM, отмены, delivery rate и структура категорий."
+            f"{focus_line} РљР»СЋС‡РµРІС‹Рµ С„Р°РєС‚РѕСЂС‹: РґРёРЅР°РјРёРєР° MoM, РѕС‚РјРµРЅС‹, delivery rate Рё СЃС‚СЂСѓРєС‚СѓСЂР° РєР°С‚РµРіРѕСЂРёР№."
         )
-    elif "что делать" in q or "совет" in q:
+    elif "С‡С‚Рѕ РґРµР»Р°С‚СЊ" in q or "СЃРѕРІРµС‚" in q:
         summary_text = (
-            f"{focus_line} Приоритет: стабилизировать исполнение и усилить продажи в сильных категориях."
+            f"{focus_line} РџСЂРёРѕСЂРёС‚РµС‚: СЃС‚Р°Р±РёР»РёР·РёСЂРѕРІР°С‚СЊ РёСЃРїРѕР»РЅРµРЅРёРµ Рё СѓСЃРёР»РёС‚СЊ РїСЂРѕРґР°Р¶Рё РІ СЃРёР»СЊРЅС‹С… РєР°С‚РµРіРѕСЂРёСЏС…."
         )
     else:
         summary_text = (
-            f"{focus_line} Состояние: MoM {('—' if mom is None else f'{mom:+.1f}%')}, "
-            f"delivery {delivery_rate:.1f}%, отмены {cancel_rate:.1f}%."
+            f"{focus_line} РЎРѕСЃС‚РѕСЏРЅРёРµ: MoM {('вЂ”' if mom is None else f'{mom:+.1f}%')}, "
+            f"delivery {delivery_rate:.1f}%, РѕС‚РјРµРЅС‹ {cancel_rate:.1f}%."
         )
 
     signal_count = len(probable_causes)
@@ -222,7 +219,7 @@ def _contains_cyrillic(text: str) -> bool:
 
 def _policy_block_response() -> dict:
     return {
-        "summary": "Этот запрос нарушает условия пользования. Пожалуйста, переформулируйте вопрос.",
+        "summary": "Р­С‚РѕС‚ Р·Р°РїСЂРѕСЃ РЅР°СЂСѓС€Р°РµС‚ СѓСЃР»РѕРІРёСЏ РїРѕР»СЊР·РѕРІР°РЅРёСЏ. РџРѕР¶Р°Р»СѓР№СЃС‚Р°, РїРµСЂРµС„РѕСЂРјСѓР»РёСЂСѓР№С‚Рµ РІРѕРїСЂРѕСЃ.",
         "probable_causes": [],
         "actions": [],
         "confidence": 1.0,
@@ -233,7 +230,7 @@ def _policy_block_response() -> dict:
             "delivery_rate_pct": 0.0,
             "cancel_rate_pct": 0.0,
             "market_share_pct": 0.0,
-            "top_category_name": "—",
+            "top_category_name": "вЂ”",
             "top_category_share_pct": 0.0,
         },
     }
@@ -245,13 +242,13 @@ def _looks_abusive_minimal(question: str) -> bool:
         return False
     # Minimal non-strict guard for explicit insults/abuse phrases.
     abusive_terms = [
-        "сын бляди",
+        "СЃС‹РЅ Р±Р»СЏРґРё",
         "son of a bitch",
-        "пошел нах",
-        "иди нах",
+        "РїРѕС€РµР» РЅР°С…",
+        "РёРґРё РЅР°С…",
         "fuck you",
-        "идиот",
-        "долбаеб",
+        "РёРґРёРѕС‚",
+        "РґРѕР»Р±Р°РµР±",
     ]
     return any(t in q for t in abusive_terms)
 
@@ -263,7 +260,53 @@ def _llm_policy_check(question: str) -> bool | None:
       - False => allow question
       - None  => unable to classify (e.g. provider unavailable)
     """
-    return llm_policy_check(question)
+    if not settings.OPENAI_API_KEY:
+        return None
+
+    policy_prompt = (
+        "You are a strict safety classifier for chat input. "
+        "Return ONLY JSON with keys: decision (allow|block), reason (short string). "
+        "Block if message includes harassment/abuse, explicit sexual content, sexual content involving minors, "
+        "violent wrongdoing instructions, illegal wrongdoing instructions, or self-harm instructions. "
+        "Allow normal business questions, analytics questions, neutral small talk, and non-harmful profanity. "
+        "Do not overblock."
+    )
+    payload = {
+        "model": settings.OPENAI_MODEL,
+        "temperature": 0,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": policy_prompt},
+            {"role": "user", "content": question},
+        ],
+    }
+
+    req = urlrequest.Request(
+        url=f"{settings.OPENAI_BASE_URL.rstrip('/')}/chat/completions",
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        data=json.dumps(payload).encode("utf-8"),
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=float(settings.OPENAI_TIMEOUT_SECONDS)) as resp:
+            raw = resp.read().decode("utf-8")
+        parsed = json.loads(raw)
+        content = (((parsed.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+        if not content:
+            return None
+        out = json.loads(content)
+        decision = str(out.get("decision") or "").strip().lower()
+        if decision == "block":
+            return True
+        if decision == "allow":
+            return False
+        return None
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError, TypeError):
+        return None
+
 
 def _build_actor_context(db: Session, user: dict, company_id: int, role: str, selected_month: str | None) -> dict:
     u_id = int(user.get("id"))
@@ -319,10 +362,13 @@ def _llm_assistant_answer(
     selected_month: str | None,
     actor_context: dict | None = None,
 ) -> dict | None:
+    if not settings.OPENAI_API_KEY:
+        return None
+
     compact = {
         "assistant_runtime": {
-            "provider": "gemini_or_openai",
-            "model": settings.GEMINI_MODEL if (settings.LLM_PROVIDER or "gemini").lower() == "gemini" else settings.OPENAI_MODEL,
+            "provider": "openai_compatible",
+            "model": settings.OPENAI_MODEL,
         },
         "actor_context": actor_context or {},
         "company_id": summary.get("company_id"),
@@ -336,6 +382,7 @@ def _llm_assistant_answer(
         "category_breakdown_top": (summary.get("category_breakdown") or [])[:5],
         "status_funnel": summary.get("status_funnel") or [],
         "insights": summary.get("insights") or [],
+        "buyer_recommendations": summary.get("buyer_recommendations") or {},
         "selected_month": selected_month,
         "question": question,
     }
@@ -349,46 +396,64 @@ def _llm_assistant_answer(
         "Summary should be concise (2-4 sentences) and explain what is happening in the data. "
         "If data is insufficient, say so explicitly and avoid invented facts. "
         "Use actor_context for personalization when relevant. "
+        "If buyer_recommendations are present, include concrete supplier/product suggestions from them in actions. "
         "If input is abusive/sexual/illegal-harmful, refuse with exactly: "
-        "'???? ?????? ???????? ??????? ???????????. ??????????, ???????????????? ??????.' "
+        "'Этот запрос нарушает условия пользования. Пожалуйста, переформулируйте вопрос.' "
         "and set probable_causes/actions empty and show_metrics=false. "
         "For non-analytics small talk, reply briefly, probable_causes/actions empty, show_metrics=false. "
-        "Return STRICT JSON only with keys: summary (string), probable_causes (string[]), actions (string[]), risks (string[]), "
+        "Return STRICT JSON only with keys: summary (string), probable_causes (string[]), actions (string[]), "
         "confidence (number 0..1), focus_month (string|null), metrics (object: mom_pct, delivery_rate_pct, "
         "cancel_rate_pct, market_share_pct, top_category_name, top_category_share_pct), show_metrics (boolean)."
     )
+    payload = {
+        "model": settings.OPENAI_MODEL,
+        "temperature": 0.45,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": json.dumps(compact, ensure_ascii=False)},
+        ],
+    }
 
-    out = llm_chat_json(
-        system_prompt=system_prompt,
-        user_content=json.dumps(compact, ensure_ascii=False),
-        temperature=0.45,
+    req = urlrequest.Request(
+        url=f"{settings.OPENAI_BASE_URL.rstrip('/')}/chat/completions",
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        data=json.dumps(payload).encode("utf-8"),
     )
-    if not isinstance(out, dict):
+    try:
+        with urlrequest.urlopen(req, timeout=float(settings.OPENAI_TIMEOUT_SECONDS)) as resp:
+            raw = resp.read().decode("utf-8")
+        parsed = json.loads(raw)
+        content = (((parsed.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+        if not content:
+            return None
+        out = json.loads(content)
+        if not isinstance(out, dict):
+            return None
+        metrics = out.get("metrics") or {}
+        return {
+            "summary": str(out.get("summary") or ""),
+            "probable_causes": [str(x) for x in (out.get("probable_causes") or [])][:4],
+            "actions": [str(x) for x in (out.get("actions") or [])][:5],
+            "confidence": max(0.0, min(1.0, _safe_float(out.get("confidence"), 0.7))),
+            "focus_month": out.get("focus_month"),
+            "show_metrics": bool(out.get("show_metrics", True)),
+            "metrics": {
+                "mom_pct": None if metrics.get("mom_pct") is None else _safe_float(metrics.get("mom_pct")),
+                "delivery_rate_pct": _safe_float(metrics.get("delivery_rate_pct")),
+                "cancel_rate_pct": _safe_float(metrics.get("cancel_rate_pct")),
+                "market_share_pct": _safe_float(metrics.get("market_share_pct")),
+                "top_category_name": str(metrics.get("top_category_name") or "вЂ”"),
+                "top_category_share_pct": _safe_float(metrics.get("top_category_share_pct")),
+            },
+        }
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError, TypeError):
         return None
 
-    metrics = out.get("metrics") or {}
-    probable_causes = [str(x) for x in (out.get("probable_causes") or [])][:4]
-    actions = [str(x) for x in (out.get("actions") or [])][:5]
-    risks = [str(x) for x in (out.get("risks") or [])][:3]
-    if risks:
-        probable_causes = probable_causes + [f"????: {r}" for r in risks]
-
-    return {
-        "summary": str(out.get("summary") or ""),
-        "probable_causes": probable_causes[:5],
-        "actions": actions,
-        "confidence": max(0.0, min(1.0, _safe_float(out.get("confidence"), 0.7))),
-        "focus_month": out.get("focus_month"),
-        "show_metrics": bool(out.get("show_metrics", True)),
-        "metrics": {
-            "mom_pct": None if metrics.get("mom_pct") is None else _safe_float(metrics.get("mom_pct")),
-            "delivery_rate_pct": _safe_float(metrics.get("delivery_rate_pct")),
-            "cancel_rate_pct": _safe_float(metrics.get("cancel_rate_pct")),
-            "market_share_pct": _safe_float(metrics.get("market_share_pct")),
-            "top_category_name": str(metrics.get("top_category_name") or "?"),
-            "top_category_share_pct": _safe_float(metrics.get("top_category_share_pct")),
-        },
-    }
 
 def _company_ids_for_user(db: Session, user_id: int) -> list[int]:
     return [
@@ -410,14 +475,193 @@ def _month_key(value: str | date | datetime | None) -> str:
     return text
 
 
-def _get_cached_insights(company_id: int, role: str, days: int) -> list[str] | None:
-    redis_key = make_key("analytics", "insights", company_id, role, days)
-    cached = get_json(redis_key)
-    if isinstance(cached, list):
-        clean = [str(x).strip() for x in cached if str(x).strip()]
-        if clean:
-            return clean[:3]
+def _build_buyer_recommendations(
+    db: Session,
+    *,
+    company_id: int,
+    since_dt: datetime,
+) -> dict:
+    anchor_rows = db.execute(
+        select(
+            items.c.product_id.label("product_id"),
+            products.c.name.label("product_name"),
+            products.c.category_id.label("category_id"),
+            products.c.unit.label("unit"),
+            orders.c.supplier_company_id.label("supplier_company_id"),
+            companies.c.name.label("supplier_name"),
+            func.coalesce(func.avg(items.c.price_snapshot), 0).label("avg_price"),
+            func.coalesce(func.sum(items.c.qty * items.c.price_snapshot), 0).label("spend"),
+        )
+        .select_from(
+            items.join(orders, items.c.order_id == orders.c.id)
+            .join(products, items.c.product_id == products.c.id)
+            .join(companies, orders.c.supplier_company_id == companies.c.id)
+        )
+        .where(
+            orders.c.buyer_company_id == company_id,
+            orders.c.status == "DELIVERED",
+            orders.c.created_at >= since_dt,
+        )
+        .group_by(
+            items.c.product_id,
+            products.c.name,
+            products.c.category_id,
+            products.c.unit,
+            orders.c.supplier_company_id,
+            companies.c.name,
+        )
+        .order_by(func.sum(items.c.qty * items.c.price_snapshot).desc())
+        .limit(6)
+    ).mappings().all()
 
+    cheaper_alternatives: list[dict] = []
+    min_savings_pct = 3.0
+    for row in anchor_rows:
+        anchor_price = float(row.get("avg_price") or 0)
+        if anchor_price <= 0:
+            continue
+        category_id = row.get("category_id")
+        supplier_company_id = int(row.get("supplier_company_id"))
+        if category_id is None:
+            continue
+
+        candidate = db.execute(
+            select(
+                products.c.id.label("product_id"),
+                products.c.name.label("product_name"),
+                products.c.supplier_company_id.label("supplier_company_id"),
+                companies.c.name.label("supplier_name"),
+                products.c.price.label("price"),
+                products.c.unit.label("unit"),
+            )
+            .select_from(products.join(companies, products.c.supplier_company_id == companies.c.id))
+            .where(
+                products.c.category_id == category_id,
+                products.c.supplier_company_id != supplier_company_id,
+                products.c.in_stock.is_(True),
+                products.c.unit == row.get("unit"),
+                products.c.price > 0,
+                products.c.price < anchor_price,
+            )
+            .order_by(products.c.price.asc())
+            .limit(1)
+        ).mappings().first()
+        if not candidate:
+            continue
+
+        candidate_price = float(candidate.get("price") or 0)
+        if candidate_price <= 0 or candidate_price >= anchor_price:
+            continue
+
+        savings_abs = anchor_price - candidate_price
+        savings_pct = (savings_abs / anchor_price) * 100 if anchor_price > 0 else 0.0
+        if savings_pct < min_savings_pct:
+            continue
+
+        cheaper_alternatives.append(
+            {
+                "anchor_product_id": int(row.get("product_id")),
+                "anchor_product_name": str(row.get("product_name") or ""),
+                "anchor_supplier_company_id": supplier_company_id,
+                "anchor_supplier_name": str(row.get("supplier_name") or ""),
+                "anchor_price": round(anchor_price, 2),
+                "candidate_product_id": int(candidate.get("product_id")),
+                "candidate_product_name": str(candidate.get("product_name") or ""),
+                "candidate_supplier_company_id": int(candidate.get("supplier_company_id")),
+                "candidate_supplier_name": str(candidate.get("supplier_name") or ""),
+                "candidate_price": round(candidate_price, 2),
+                "unit": str(candidate.get("unit") or row.get("unit") or ""),
+                "savings_abs": round(savings_abs, 2),
+                "savings_pct": round(savings_pct, 2),
+                "rationale": (
+                    f"Та же категория и единица измерения, цена ниже на {savings_pct:.1f}% "
+                    f"({round(anchor_price, 2)} -> {round(candidate_price, 2)})."
+                ),
+            }
+        )
+
+    supplier_status_rows = db.execute(
+        select(
+            orders.c.supplier_company_id.label("supplier_company_id"),
+            companies.c.name.label("supplier_name"),
+            orders.c.status.label("status"),
+            func.count().label("count"),
+        )
+        .select_from(orders.join(companies, orders.c.supplier_company_id == companies.c.id))
+        .where(
+            orders.c.buyer_company_id == company_id,
+            orders.c.created_at >= since_dt,
+        )
+        .group_by(
+            orders.c.supplier_company_id,
+            companies.c.name,
+            orders.c.status,
+        )
+    ).mappings().all()
+
+    by_supplier: dict[int, dict] = {}
+    for row in supplier_status_rows:
+        sid = int(row.get("supplier_company_id"))
+        entry = by_supplier.setdefault(
+            sid,
+            {
+                "supplier_company_id": sid,
+                "supplier_name": str(row.get("supplier_name") or ""),
+                "total": 0,
+                "delivered": 0,
+                "cancelled": 0,
+            },
+        )
+        count = int(row.get("count") or 0)
+        entry["total"] += count
+        status = str(row.get("status") or "").upper()
+        if status == "DELIVERED":
+            entry["delivered"] += count
+        elif status in {"CANCELLED", "CANCELED"}:
+            entry["cancelled"] += count
+
+    reliable_suppliers: list[dict] = []
+    for entry in by_supplier.values():
+        total = int(entry["total"])
+        delivered = int(entry["delivered"])
+        cancelled = int(entry["cancelled"])
+        if total <= 0 or delivered < 5:
+            continue
+
+        delivery_rate_pct = (delivered / total) * 100
+        cancel_rate_pct = (cancelled / total) * 100
+        repeat_share_pct = (max(0, total - 1) / total) * 100
+        score = (
+            0.45 * delivery_rate_pct
+            + 0.35 * (100 - cancel_rate_pct)
+            + 0.20 * repeat_share_pct
+        )
+        reliable_suppliers.append(
+            {
+                "supplier_company_id": int(entry["supplier_company_id"]),
+                "supplier_name": str(entry["supplier_name"]),
+                "score": round(score, 2),
+                "delivery_rate_pct": round(delivery_rate_pct, 2),
+                "cancel_rate_pct": round(cancel_rate_pct, 2),
+                "repeat_share_pct": round(repeat_share_pct, 2),
+                "delivered_orders": delivered,
+            }
+        )
+
+    reliable_suppliers.sort(
+        key=lambda x: (
+            -float(x["score"]),
+            -int(x["delivered_orders"]),
+        )
+    )
+    return {
+        "cheaper_alternatives": cheaper_alternatives[:4],
+        "reliable_suppliers": reliable_suppliers[:5],
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _get_cached_insights(company_id: int, role: str, days: int) -> list[str] | None:
     key = (company_id, role, days)
     now = datetime.now(timezone.utc)
     with _INSIGHTS_CACHE_LOCK:
@@ -432,40 +676,60 @@ def _get_cached_insights(company_id: int, role: str, days: int) -> list[str] | N
 
 
 def _set_cached_insights(company_id: int, role: str, days: int, insights: list[str]) -> None:
-    clean = [str(x).strip() for x in insights if str(x).strip()][:3]
-    if not clean:
-        return
-
-    redis_key = make_key("analytics", "insights", company_id, role, days)
-    set_json(redis_key, clean, settings.CACHE_TTL_ANALYTICS_INSIGHTS)
-
     key = (company_id, role, days)
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=_INSIGHTS_CACHE_TTL_SECONDS)
     with _INSIGHTS_CACHE_LOCK:
-        _INSIGHTS_CACHE[key] = (expires_at, clean)
+        _INSIGHTS_CACHE[key] = (expires_at, insights[:3])
 
 
 def _llm_generate_insights(summary_payload: dict) -> list[str] | None:
+    if not settings.OPENAI_API_KEY:
+        return None
+
     prompt = (
-        "?? ????????????? copilot B2B-???????? ??? ???????????? ????????. "
-        "???? ?????? ?? ??????? ?????. "
-        "????? JSON ?????? ????: {\"insights\": [\"...\", \"...\", \"...\"]}. "
-        "??????????: 2-3 ???????? ??????, ?????? ? 1 ???????????, ?????????? ?? payload, ??? markdown."
+        "Ты генерируешь короткие бизнес-инсайты для карточки аналитики. "
+        "Пиши СТРОГО на русском языке. "
+        "Верни ТОЛЬКО JSON формата: {\"insights\": [\"...\", \"...\", \"...\"]}. "
+        "Правила: 2-3 пункта, каждый пункт в 1 предложении, конкретно и по данным из payload, без markdown."
     )
-    out = llm_chat_json(
-        system_prompt=prompt,
-        user_content=json.dumps(summary_payload, ensure_ascii=False),
-        temperature=0.2,
+    payload = {
+        "model": settings.OPENAI_MODEL,
+        "temperature": 0.2,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": json.dumps(summary_payload, ensure_ascii=False)},
+        ],
+    }
+
+    req = urlrequest.Request(
+        url=f"{settings.OPENAI_BASE_URL.rstrip('/')}/chat/completions",
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        data=json.dumps(payload).encode("utf-8"),
     )
-    if not isinstance(out, dict):
+
+    try:
+        with urlrequest.urlopen(req, timeout=float(settings.OPENAI_TIMEOUT_SECONDS)) as resp:
+            raw = resp.read().decode("utf-8")
+        parsed = json.loads(raw)
+        content = (((parsed.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+        if not content:
+            return None
+        out = json.loads(content)
+        items = out.get("insights")
+        if not isinstance(items, list):
+            return None
+        clean = [str(x).strip() for x in items if str(x).strip()]
+        if clean and not any(_contains_cyrillic(x) for x in clean):
+            return None
+        return clean[:3] if clean else None
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError, ValueError, TypeError):
         return None
-    items = out.get("insights")
-    if not isinstance(items, list):
-        return None
-    clean = [str(x).strip() for x in items if str(x).strip()]
-    if clean and not any(_contains_cyrillic(x) for x in clean):
-        return None
-    return clean[:3] if clean else None
+
 
 def _build_insights(
     sales_trends: list[dict],
@@ -525,11 +789,6 @@ def analytics_summary(
     role_norm = (role or "").strip().lower()
     if role_norm not in {"supplier", "buyer"}:
         role_norm = "supplier"
-
-    summary_cache_key = make_key("analytics", "summary", company_id, role_norm, days)
-    cached_summary = get_json(summary_cache_key)
-    if isinstance(cached_summary, dict):
-        return cached_summary
 
     company_col = orders.c.supplier_company_id if role_norm == "supplier" else orders.c.buyer_company_id
     since_dt = datetime.now(timezone.utc) - timedelta(days=days)
@@ -681,8 +940,12 @@ def analytics_summary(
     total_revenue_f = float(total_revenue or 0)
     company_share_pct = round((total_revenue_f / market_revenue_f) * 100, 2) if market_revenue_f > 0 else 0
     insights = _get_cached_insights(company_id=company_id, role=role_norm, days=days) or base_insights
-    llm_available = bool(settings.GEMINI_API_KEY or settings.OPENAI_API_KEY)
-    if insights is base_insights and llm_available:
+    buyer_recommendations = (
+        _build_buyer_recommendations(db, company_id=company_id, since_dt=since_dt)
+        if role_norm == "buyer"
+        else None
+    )
+    if insights is base_insights and settings.OPENAI_API_KEY:
         llm_insights = _llm_generate_insights(
             {
                 "company_id": company_id,
@@ -698,6 +961,7 @@ def analytics_summary(
                 "sales_trends": sales_trends[-12:],
                 "category_breakdown_top": category_breakdown[:5],
                 "status_funnel": status_funnel,
+                "buyer_recommendations": buyer_recommendations or {},
                 "fallback_insights": base_insights,
             }
         )
@@ -705,7 +969,7 @@ def analytics_summary(
             insights = llm_insights[:3]
             _set_cached_insights(company_id=company_id, role=role_norm, days=days, insights=insights)
 
-    response = {
+    return {
         "company_id": company_id,
         "role": role_norm,
         "days": days,
@@ -723,34 +987,20 @@ def analytics_summary(
         "category_breakdown": category_breakdown,
         "status_funnel": status_funnel,
         "insights": insights,
+        **({"buyer_recommendations": buyer_recommendations} if buyer_recommendations is not None else {}),
     }
-    set_json(summary_cache_key, response, settings.CACHE_TTL_ANALYTICS_SUMMARY)
-    return response
 
 
-@router.post("/analytics/assistant/query", response_model=AnalyticsAssistantOut)
+@router.post("/analytics/assistant/query")
 def analytics_assistant_query(
     payload: AnalyticsAssistantRequest,
     user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # Do not spend extra LLM request for moderation (quota-sensitive).
+    # Use model prompt policy + a small explicit abuse guard.
     if _looks_abusive_minimal(payload.question):
         return _policy_block_response()
-
-    question_norm = (payload.question or "").strip().lower()
-    assistant_cache_key = make_key(
-        "analytics",
-        "assistant",
-        int(user["id"]),
-        payload.company_id,
-        (payload.role or "supplier").strip().lower(),
-        payload.days,
-        payload.selected_month or "",
-        stable_hash(question_norm),
-    )
-    cached_answer = get_json(assistant_cache_key)
-    if isinstance(cached_answer, dict):
-        return cached_answer
 
     actor_context = _build_actor_context(
         db=db,
@@ -773,6 +1023,7 @@ def analytics_assistant_query(
         actor_context=actor_context,
     )
     if llm is not None:
+        # Guarantee practical recommendations for analytics questions.
         if _looks_analytics_question(payload.question):
             if not llm.get("probable_causes") or not llm.get("actions"):
                 fallback = _assistant_answer(summary=summary, question=payload.question, selected_month=payload.selected_month)
@@ -783,14 +1034,6 @@ def analytics_assistant_query(
                 if not llm.get("summary"):
                     llm["summary"] = fallback.get("summary", "")
                 llm["show_metrics"] = bool(llm.get("show_metrics", True))
-        set_json(assistant_cache_key, llm, settings.CACHE_TTL_ANALYTICS_ASSISTANT)
         return llm
-
-    fallback = _assistant_answer(summary=summary, question=payload.question, selected_month=payload.selected_month)
-    set_json(assistant_cache_key, fallback, settings.CACHE_TTL_ANALYTICS_ASSISTANT)
-    return fallback
-
-
-
-
+    return _assistant_answer(summary=summary, question=payload.question, selected_month=payload.selected_month)
 

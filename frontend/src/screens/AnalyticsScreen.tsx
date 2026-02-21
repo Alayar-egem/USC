@@ -342,6 +342,9 @@ export default function AnalyticsScreen({
   const topCategories = (data?.category_breakdown ?? []).slice(0, 6);
   const funnelRows = (data?.status_funnel ?? []).filter((x) => x.count > 0);
   const insights = data?.insights ?? [];
+  const buyerRecommendations = data?.buyer_recommendations;
+  const cheaperAlternatives = buyerRecommendations?.cheaper_alternatives ?? [];
+  const reliableSuppliers = buyerRecommendations?.reliable_suppliers ?? [];
   const salesValues = salesSeries.map((x) => x.value);
   const recent3 = salesSeries.slice(-3).map((x) => x.value);
   const volatilityPct = avg(salesValues) > 0 ? (stddev(salesValues) / avg(salesValues)) * 100 : 0;
@@ -699,7 +702,7 @@ export default function AnalyticsScreen({
           <div className="analytic-title">{isSupplier ? "Продажи поставщика" : "Покупки компании"}</div>
           <div className="analytic-row">
             <div className="analytic-metric">
-              <div className="metric-label">Выручка (за период)</div>
+              <div className="metric-label">{isSupplier ? "Выручка (за период)" : "Закупки (за период)"}</div>
               <div className="metric-value">{formatK(data?.total_revenue ?? 0)}</div>
             </div>
             <div className="analytic-metric">
@@ -715,7 +718,7 @@ export default function AnalyticsScreen({
           {salesLineChart ? (
             <div className="analytics-line-block">
               <div className="analytics-line-head">
-                <div className="analytics-line-caption">Динамика выручки по месяцам</div>
+                <div className="analytics-line-caption">{isSupplier ? "Динамика выручки по месяцам" : "Динамика закупок по месяцам"}</div>
                 <div className="analytics-line-value-chip">{`${formatK(salesSeriesView[salesSeriesView.length - 1]?.value ?? 0)} сейчас`}</div>
               </div>
               <div className="analytics-line-plot">
@@ -784,7 +787,7 @@ export default function AnalyticsScreen({
                     <span className="analytics-line-detail-value">{salesLinePoint.label}</span>
                   </div>
                   <div className="analytics-line-detail-item">
-                    <span className="analytics-line-detail-label">Выручка</span>
+                    <span className="analytics-line-detail-label">{isSupplier ? "Выручка" : "Закупки"}</span>
                     <span className="analytics-line-detail-value">{formatK(salesLinePoint.value)}</span>
                   </div>
                   <div className="analytics-line-detail-item">
@@ -808,7 +811,7 @@ export default function AnalyticsScreen({
         </div>
 
         <div className="analytic-card">
-          <div className="analytic-title">Прогноз продаж (регрессия)</div>
+          <div className="analytic-title">{isSupplier ? "Прогноз продаж (регрессия)" : "Прогноз закупок (регрессия)"}</div>
           <div className="analytic-subtitle">Следующие 3 месяца</div>
           <div className="forecast-row">
             {forecastSeries.length ? (
@@ -822,7 +825,9 @@ export default function AnalyticsScreen({
               <div className="order-item-muted">Недостаточно данных для прогноза</div>
             )}
           </div>
-          <div className="analytic-note">{`Модель: линейная регрессия по последним ${salesSeries.length} месяцам.`}</div>
+          <div className="analytic-note">
+            {`Модель: линейная регрессия по последним ${salesSeries.length} месяцам ${isSupplier ? "продаж" : "закупок"}.`}
+          </div>
         </div>
 
         <div className="analytic-card">
@@ -882,6 +887,57 @@ export default function AnalyticsScreen({
             </div>
           </div>
         </div>
+
+        {!isSupplier ? (
+          <div className="analytic-card">
+            <div className="analytic-title">Выгодные альтернативы</div>
+            {cheaperAlternatives.length ? (
+              <div className="buyer-reco-list">
+                {cheaperAlternatives.slice(0, 4).map((alt) => (
+                  <div className="buyer-reco-item" key={`${alt.anchor_product_id}-${alt.candidate_product_id}`}>
+                    <div className="buyer-reco-head">
+                      <span className="buyer-reco-product">{alt.anchor_product_name}</span>
+                      <span className="buyer-reco-save">{`-${alt.savings_pct.toFixed(1)}%`}</span>
+                    </div>
+                    <div className="buyer-reco-route">
+                      <span>{`${alt.anchor_supplier_name} (${formatK(alt.anchor_price)})`}</span>
+                      <span className="buyer-reco-arrow">→</span>
+                      <span>{`${alt.candidate_supplier_name} (${formatK(alt.candidate_price)})`}</span>
+                    </div>
+                    <div className="buyer-reco-note">{alt.rationale}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="order-item-muted">Недостаточно данных для рекомендаций по цене</div>
+            )}
+          </div>
+        ) : null}
+
+        {!isSupplier ? (
+          <div className="analytic-card">
+            <div className="analytic-title">Надежные поставщики</div>
+            {reliableSuppliers.length ? (
+              <div className="supplier-health-list">
+                {reliableSuppliers.slice(0, 5).map((supplier) => (
+                  <div className="supplier-health-item" key={supplier.supplier_company_id}>
+                    <div className="supplier-health-head">
+                      <span className="supplier-health-name">{supplier.supplier_name}</span>
+                      <span className="supplier-health-score">{`${supplier.score.toFixed(1)}/100`}</span>
+                    </div>
+                    <div className="supplier-health-metrics">
+                      <span>{`Delivery ${supplier.delivery_rate_pct.toFixed(1)}%`}</span>
+                      <span>{`Отмены ${supplier.cancel_rate_pct.toFixed(1)}%`}</span>
+                      <span>{`Повторные ${supplier.repeat_share_pct.toFixed(1)}%`}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="order-item-muted">Недостаточно данных для оценки надежности поставщиков</div>
+            )}
+          </div>
+        ) : null}
 
         <div className="analytic-card">
           <div className="analytic-title">Категории</div>

@@ -6,6 +6,7 @@ export function Drawer({
   onGo,
   onLogout,
   onSwitchCompany,
+  onRoleChange,
   companyName,
   role,
   notificationCount = 0,
@@ -18,6 +19,7 @@ export function Drawer({
   onGo: (s: Screen) => void;
   onLogout: () => void;
   onSwitchCompany: () => void;
+  onRoleChange: (role: "buyer" | "supplier") => void;
   companyName?: string | null;
   role?: string | null;
   notificationCount?: number;
@@ -26,6 +28,8 @@ export function Drawer({
   completedOrders?: number;
 }) {
   const safeRating = Math.max(0, Math.min(5, ratingValue));
+  const roleLower = String(role || "").toLowerCase() === "supplier" ? "supplier" : "buyer";
+  const roleLabel = roleLower === "supplier" ? "Поставщик" : "Покупатель";
 
   return (
     <>
@@ -64,7 +68,23 @@ export function Drawer({
               <span className="drawer-score-pill drawer-score-pill-accent">{`${Math.max(94, Math.min(99, Math.round(safeRating * 20)))}% SLA`}</span>
             </div>
             {companyName && <div className="drawer-company">{companyName}</div>}
-            {role && <div className="drawer-role">{role}</div>}
+            <div className="drawer-role">{roleLabel}</div>
+            <div className="drawer-role-switch" role="group" aria-label="Режим работы">
+              <button
+                type="button"
+                className={`drawer-role-btn ${roleLower === "buyer" ? "active" : ""}`}
+                onClick={() => onRoleChange("buyer")}
+              >
+                Покупатель
+              </button>
+              <button
+                type="button"
+                className={`drawer-role-btn ${roleLower === "supplier" ? "active" : ""}`}
+                onClick={() => onRoleChange("supplier")}
+              >
+                Поставщик
+              </button>
+            </div>
           </div>
         </div>
 

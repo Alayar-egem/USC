@@ -1,26 +1,35 @@
-п»їimport { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { login, registerEmail, requestEmailCode, requestPhoneCode, verifyPhoneCode } from "../api/auth";
 
 type Role = "buyer" | "supplier";
 
+type AuthMode = "login" | "register";
+
+type LoginMethod = "email" | "phone";
+
 const TEST_ACCOUNTS = [
-  { email: "buyer1@usc.demo", password: "demo123456", role: "РџРѕРєСѓРїР°С‚РµР»СЊ", sales: 0, purchases: 1052 },
-  { email: "buyer2@usc.demo", password: "demo123456", role: "РџРѕРєСѓРїР°С‚РµР»СЊ", sales: 0, purchases: 1141 },
-  { email: "supplier1@usc.demo", password: "demo123456", role: "РџРѕСЃС‚Р°РІС‰РёРє", sales: 133, purchases: 0 },
-  { email: "supplier2@usc.demo", password: "demo123456", role: "РџРѕСЃС‚Р°РІС‰РёРє", sales: 132, purchases: 0 },
-  { email: "supplier3@usc.demo", password: "demo123456", role: "РџРѕСЃС‚Р°РІС‰РёРє", sales: 962, purchases: 0 },
-  { email: "supplier4@usc.demo", password: "demo123456", role: "РџРѕСЃС‚Р°РІС‰РёРє", sales: 966, purchases: 0 },
+  { email: "buyer1@usc.demo", password: "demo123456", role: "Покупатель", sales: 0, purchases: 1450 },
+  { email: "buyer2@usc.demo", password: "demo123456", role: "Покупатель", sales: 0, purchases: 857 },
+  { email: "supplier1@usc.demo", password: "demo123456", role: "Поставщик", sales: 133, purchases: 0 },
+  { email: "supplier2@usc.demo", password: "demo123456", role: "Поставщик", sales: 132, purchases: 0 },
+  { email: "supplier3@usc.demo", password: "demo123456", role: "Поставщик", sales: 962, purchases: 0 },
+  { email: "supplier4@usc.demo", password: "demo123456", role: "Поставщик", sales: 966, purchases: 0 },
 ] as const;
 
 export default function AuthScreen({ onSuccess }: { onSuccess: () => void }) {
-  const [method, setMethod] = useState<"email" | "phone">("email");
-  const [emailMode, setEmailMode] = useState<"login" | "register">("login");
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [method, setMethod] = useState<LoginMethod>("email");
   const [role, setRole] = useState<Role>("buyer");
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
+  const [loginEmailValue, setLoginEmailValue] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginPhone, setLoginPhone] = useState("");
+  const [loginPhoneCode, setLoginPhoneCode] = useState("");
+
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regPhone, setRegPhone] = useState("");
+  const [regCode, setRegCode] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
 
@@ -43,151 +52,185 @@ export default function AuthScreen({ onSuccess }: { onSuccess: () => void }) {
     return () => clearInterval(t);
   }, [phoneCooldown]);
 
+  useEffect(() => {
+    setMsg(null);
+    if (authMode === "register") {
+      setMethod("email");
+      setPhoneCodeSent(false);
+      setLoginPhoneCode("");
+    } else {
+      setEmailCodeSent(false);
+      setRegCode("");
+    }
+  }, [authMode]);
+
   const passwordScore = (() => {
     let score = 0;
-    if (password.length >= 8) score += 1;
-    if (/[A-Z]/.test(password)) score += 1;
-    if (/[a-z]/.test(password)) score += 1;
-    if (/[0-9]/.test(password)) score += 1;
-    if (/[^A-Za-z0-9]/.test(password)) score += 1;
+    if (regPassword.length >= 8) score += 1;
+    if (/[A-Z]/.test(regPassword)) score += 1;
+    if (/[a-z]/.test(regPassword)) score += 1;
+    if (/[0-9]/.test(regPassword)) score += 1;
+    if (/[^A-Za-z0-9]/.test(regPassword)) score += 1;
     return score;
   })();
 
   const passwordLabel =
-    passwordScore >= 4 ? "РЎРёР»СЊРЅС‹Р№ РїР°СЂРѕР»СЊ" : passwordScore >= 3 ? "РќРѕСЂРјР°Р»СЊРЅС‹Р№ РїР°СЂРѕР»СЊ" : "РЎР»Р°Р±С‹Р№ РїР°СЂРѕР»СЊ";
+    passwordScore >= 4 ? "Сильный пароль" : passwordScore >= 3 ? "Нормальный пароль" : "Слабый пароль";
 
   const isEmailValid = (value: string) => /.+@.+\..+/.test(value.trim());
   const isPhoneValid = (value: string) => value.replace(/[^0-9+]/g, "").length >= 6;
 
-  const resetCodes = () => {
-    setCode("");
-    setEmailCodeSent(false);
-    setPhoneCodeSent(false);
+  const mapError = (e: unknown) => {
+    const text = String(e);
+    if (text.includes("Invalid email")) return "Некорректный email";
+    if (text.includes("Password too short")) return "Пароль минимум 6 символов";
+    if (text.includes("Email code required")) return "Требуется код из email";
+    if (text.includes("Code not requested")) return "Сначала запросите код на email";
+    if (text.includes("Code expired")) return "Код истек, запросите новый";
+    if (text.includes("Invalid code")) return "Неверный код подтверждения";
+    if (text.includes("already exists")) return "Такой аккаунт уже существует";
+    if (text.includes("Failed to send email code")) return "Не удалось отправить код на почту";
+    if (text.includes("Email provider is not configured")) return "Почтовый сервис не настроен";
+    if (text.includes("401")) return "Неверный email или пароль";
+    if (text.includes("422")) return "Проверьте данные и попробуйте снова";
+    if (text.includes("Register failed. DB says:")) {
+      const suffix = text.split("Register failed. DB says:")[1]?.trim();
+      return suffix ? `DB: ${suffix}` : "Ошибка базы при регистрации";
+    }
+    return text;
   };
 
-  const submitEmail = async () => {
+  const submitLoginEmail = async () => {
     setMsg(null);
-    const normalizedEmail = email.trim().toLowerCase();
-    const normalizedCode = code.trim();
-
-    if (!normalizedEmail || !isEmailValid(normalizedEmail)) {
-      setMsg("Р’РІРµРґРё РєРѕСЂСЂРµРєС‚РЅС‹Р№ email");
+    const email = loginEmailValue.trim().toLowerCase();
+    if (!email || !isEmailValid(email)) {
+      setMsg("Введите корректный email");
       return;
     }
-    if (!password) {
-      setMsg("Р’РІРµРґРё РїР°СЂРѕР»СЊ");
-      return;
-    }
-    if (emailMode === "register" && (password.length < 6 || passwordScore < 3)) {
-      setMsg("РџР°СЂРѕР»СЊ СЃР»РёС€РєРѕРј СЃР»Р°Р±С‹Р№");
-      return;
-    }
-    if (emailMode === "register" && !normalizedCode) {
-      setMsg("Р’РІРµРґРё РєРѕРґ РёР· email");
+    if (!loginPassword) {
+      setMsg("Введите пароль");
       return;
     }
 
     try {
       setBusy(true);
-      if (emailMode === "register") {
-        await registerEmail({
-          email: normalizedEmail,
-          password,
-          code: normalizedCode,
-          phone,
-          first_name: firstName,
-          last_name: lastName,
-          role,
-        });
-      }
-      await login(normalizedEmail, password);
+      await login(email, loginPassword);
       onSuccess();
     } catch (e) {
-      const text = String(e);
-      if (text.includes("Invalid email")) setMsg("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ email");
-      else if (text.includes("Password too short")) setMsg("РџР°СЂРѕР»СЊ РјРёРЅРёРјСѓРј 6 СЃРёРјРІРѕР»РѕРІ");
-      else if (text.includes("Email code required")) setMsg("РўСЂРµР±СѓРµС‚СЃСЏ РєРѕРґ РёР· email");
-      else if (text.includes("Code not requested")) setMsg("РЎРЅР°С‡Р°Р»Р° Р·Р°РїСЂРѕСЃРё РєРѕРґ РЅР° email");
-      else if (text.includes("Code expired")) setMsg("РљРѕРґ РёСЃС‚РµРє, Р·Р°РїСЂРѕСЃРё РЅРѕРІС‹Р№");
-      else if (text.includes("Invalid code")) setMsg("РќРµРІРµСЂРЅС‹Р№ РєРѕРґ РїРѕРґС‚РІРµСЂР¶РґРµРЅРёСЏ");
-      else if (text.includes("already exists")) setMsg("РўР°РєРѕР№ Р°РєРєР°СѓРЅС‚ СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚");
-      else if (text.includes("401")) setMsg("РќРµРІРµСЂРЅС‹Р№ email РёР»Рё РїР°СЂРѕР»СЊ");
-      else if (text.includes("422")) setMsg("РџСЂРѕРІРµСЂСЊ РґР°РЅРЅС‹Рµ Рё РїРѕРїСЂРѕР±СѓР№ СЃРЅРѕРІР°");
-      else if (text.includes("Register failed. DB says:")) {
-        const suffix = text.split("Register failed. DB says:")[1]?.trim();
-        setMsg(suffix ? `DB: ${suffix}` : "РћС€РёР±РєР° Р±Р°Р·С‹ РїСЂРё СЂРµРіРёСЃС‚СЂР°С†РёРё");
-      } else {
-        setMsg(text);
-      }
+      setMsg(mapError(e));
       console.error(e);
     } finally {
       setBusy(false);
     }
   };
 
-  const sendEmailCode = async () => {
+  const sendPhoneLoginCode = async () => {
     setMsg(null);
-    const e = email.trim().toLowerCase();
-    if (!e || !isEmailValid(e)) {
-      setMsg("Р’РІРµРґРё РєРѕСЂСЂРµРєС‚РЅС‹Р№ email");
-      return;
-    }
-    if (emailCooldown > 0) return;
-    try {
-      setBusy(true);
-      const res = await requestEmailCode(e);
-      if (res?.code) setMsg(`РљРѕРґ: ${res.code} (dev)`);
-      setEmailCodeSent(true);
-      setEmailCooldown(60);
-    } catch (e) {
-      setMsg("РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ РєРѕРґ");
-      console.error(e);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const sendPhoneCode = async () => {
-    setMsg(null);
-    const p = phone.trim();
-    if (!p || !isPhoneValid(p)) {
-      setMsg("Р’РІРµРґРё РєРѕСЂСЂРµРєС‚РЅС‹Р№ С‚РµР»РµС„РѕРЅ");
+    const phone = loginPhone.trim();
+    if (!phone || !isPhoneValid(phone)) {
+      setMsg("Введите корректный телефон");
       return;
     }
     if (phoneCooldown > 0) return;
+
     try {
       setBusy(true);
-      const res = await requestPhoneCode(p);
-      if (res?.code) setMsg(`РљРѕРґ: ${res.code} (dev)`);
+      const res = await requestPhoneCode(phone);
+      if (res?.code) setMsg(`Код: ${res.code} (dev)`);
+      else setMsg("Код отправлен");
       setPhoneCodeSent(true);
       setPhoneCooldown(60);
     } catch (e) {
-      setMsg("РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ РєРѕРґ");
+      setMsg("Не удалось отправить код");
       console.error(e);
     } finally {
       setBusy(false);
     }
   };
 
-  const verifyPhone = async () => {
+  const verifyPhoneLoginCode = async () => {
     setMsg(null);
-    if (!phone || !isPhoneValid(phone) || !code) {
-      setMsg("Р’РІРµРґРё С‚РµР»РµС„РѕРЅ Рё РєРѕРґ");
+    if (!loginPhone || !isPhoneValid(loginPhone) || !loginPhoneCode.trim()) {
+      setMsg("Введите телефон и код");
       return;
     }
+
     try {
       setBusy(true);
       await verifyPhoneCode({
-        phone: phone.trim(),
+        phone: loginPhone.trim(),
+        code: loginPhoneCode.trim(),
+      });
+      onSuccess();
+    } catch (e) {
+      setMsg(mapError(e));
+      console.error(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendRegisterEmailCode = async () => {
+    setMsg(null);
+    const email = regEmail.trim().toLowerCase();
+    if (!email || !isEmailValid(email)) {
+      setMsg("Введите корректный email");
+      return;
+    }
+    if (emailCooldown > 0) return;
+
+    try {
+      setBusy(true);
+      const res = await requestEmailCode(email);
+      if (res?.code) setMsg(`Код: ${res.code} (dev)`);
+      else setMsg("Код отправлен на email");
+      setEmailCodeSent(true);
+      setEmailCooldown(60);
+    } catch (e) {
+      setMsg(mapError(e));
+      console.error(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitRegisterEmail = async () => {
+    setMsg(null);
+    const email = regEmail.trim().toLowerCase();
+    const code = regCode.trim();
+
+    if (!email || !isEmailValid(email)) {
+      setMsg("Введите корректный email");
+      return;
+    }
+    if (!regPassword) {
+      setMsg("Введите пароль");
+      return;
+    }
+    if (regPassword.length < 6 || passwordScore < 3) {
+      setMsg("Пароль слишком слабый");
+      return;
+    }
+    if (!code) {
+      setMsg("Введите код из email");
+      return;
+    }
+
+    try {
+      setBusy(true);
+      await registerEmail({
+        email,
+        password: regPassword,
         code,
-        email: email.trim().toLowerCase() || undefined,
+        phone: regPhone,
         first_name: firstName,
         last_name: lastName,
         role,
       });
+      await login(email, regPassword);
       onSuccess();
     } catch (e) {
-      setMsg("РќРµРІРµСЂРЅС‹Р№ РєРѕРґ");
+      setMsg(mapError(e));
       console.error(e);
     } finally {
       setBusy(false);
@@ -199,210 +242,197 @@ export default function AuthScreen({ onSuccess }: { onSuccess: () => void }) {
       <div className="auth-card">
         <div className="auth-header">
           <img src="/media/usc.svg" alt="USC" className="auth-logo" />
-          <div className="auth-title">Р’С…РѕРґ РІ USC</div>
-          <div className="auth-subtitle">РџРѕСЃС‚Р°РІРєРё. Р‘С‹СЃС‚СЂРѕ. РЈРґРѕР±РЅРѕ.</div>
-        </div>
-
-        <div className={`auth-tabs ${method === "phone" ? "is-phone" : "is-email"}`}>
-          <button
-            type="button"
-            className={`auth-tab ${method === "email" ? "active" : ""}`}
-            onClick={() => {
-              setMethod("email");
-              resetCodes();
-              setMsg(null);
-            }}
-          >
-            Email + РїР°СЂРѕР»СЊ
-          </button>
-          <button
-            type="button"
-            className={`auth-tab ${method === "phone" ? "active" : ""}`}
-            onClick={() => {
-              setMethod("phone");
-              resetCodes();
-              setMsg(null);
-            }}
-          >
-            РўРµР»РµС„РѕРЅ + РєРѕРґ
-          </button>
-        </div>
-
-        <div className="auth-row">
-          <label>Р РѕР»СЊ</label>
-          <div className="auth-seg">
-            <button type="button" className={role === "buyer" ? "active" : ""} onClick={() => setRole("buyer")}>
-              РџРѕРєСѓРїР°С‚РµР»СЊ
-            </button>
-            <button type="button" className={role === "supplier" ? "active" : ""} onClick={() => setRole("supplier")}>
-              РџРѕСЃС‚Р°РІС‰РёРє
-            </button>
+          <div className="auth-title">{authMode === "login" ? "Вход в USC" : "Регистрация в USC"}</div>
+          <div className="auth-subtitle">
+            {authMode === "login" ? "Войдите в аккаунт компании" : "Создайте аккаунт и подтвердите email кодом"}
           </div>
         </div>
 
-        <div className={`auth-panels ${emailMode === "register" ? "tall" : ""}`}>
-          <div className={`auth-panel ${method === "email" ? "active" : ""}`}>
-            <div className="auth-row">
-              <label>Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="seller@usc.market"
-              />
-            </div>
-            <div className="auth-row">
-              <label>РџР°СЂРѕР»СЊ</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="вЂўвЂўвЂўвЂўвЂўвЂўвЂўвЂў"
-              />
-              {emailMode === "register" && password.length > 0 && (
-                <div className="pwd-meter">
-                  <div className={`pwd-bar level-${Math.min(passwordScore, 5)}`} />
-                  <div className="pwd-label">{passwordLabel}</div>
-                </div>
-              )}
+        <div className={`auth-mode-tabs ${authMode === "register" ? "is-register" : "is-login"}`}>
+          <button type="button" className={`auth-mode-tab ${authMode === "login" ? "active" : ""}`} onClick={() => setAuthMode("login")}>
+            Вход
+          </button>
+          <button
+            type="button"
+            className={`auth-mode-tab ${authMode === "register" ? "active" : ""}`}
+            onClick={() => setAuthMode("register")}
+          >
+            Регистрация
+          </button>
+        </div>
+
+        {authMode === "login" ? (
+          <>
+            <div className={`auth-tabs ${method === "phone" ? "is-phone" : "is-email"}`}>
+              <button type="button" className={`auth-tab ${method === "email" ? "active" : ""}`} onClick={() => setMethod("email")}>
+                Email + пароль
+              </button>
+              <button type="button" className={`auth-tab ${method === "phone" ? "active" : ""}`} onClick={() => setMethod("phone")}>
+                Телефон + код
+              </button>
             </div>
 
-            {emailMode === "register" && (
-              <>
+            <div className={`auth-panels ${method === "phone" && phoneCodeSent ? "tall" : ""}`}>
+              <div className={`auth-panel ${method === "email" ? "active" : ""}`}>
                 <div className="auth-row">
-                  <label>РўРµР»РµС„РѕРЅ (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)</label>
-                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+996 ..." />
+                  <label>Email</label>
+                  <input
+                    type="email"
+                    value={loginEmailValue}
+                    onChange={(e) => setLoginEmailValue(e.target.value)}
+                    placeholder="seller@usc.market"
+                  />
                 </div>
-                <div className="auth-row split">
-                  <div className="auth-col">
-                    <label>РРјСЏ</label>
-                    <input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
-                  </div>
-                  <div className="auth-col">
-                    <label>Р¤Р°РјРёР»РёСЏ</label>
-                    <input value={lastName} onChange={(e) => setLastName(e.target.value)} />
-                  </div>
+                <div className="auth-row">
+                  <label>Пароль</label>
+                  <input
+                    type="password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="••••••••"
+                  />
                 </div>
-              </>
-            )}
+                <button className="primary-button" type="button" onClick={submitLoginEmail} disabled={busy}>
+                  Войти
+                </button>
+              </div>
 
-            {emailMode === "register" ? (
-              <>
-                {!emailCodeSent ? (
+              <div className={`auth-panel ${method === "phone" ? "active" : ""}`}>
+                <div className="auth-row">
+                  <label>Телефон</label>
+                  <input
+                    type="tel"
+                    value={loginPhone}
+                    onChange={(e) => setLoginPhone(e.target.value)}
+                    placeholder="+996 ..."
+                  />
+                </div>
+                {!phoneCodeSent ? (
                   <button
                     className="primary-button"
                     type="button"
-                    onClick={sendEmailCode}
-                    disabled={busy || emailCooldown > 0}
+                    onClick={sendPhoneLoginCode}
+                    disabled={busy || phoneCooldown > 0}
                   >
-                    {emailCooldown > 0 ? `РџРѕР»СѓС‡РёС‚СЊ РєРѕРґ (${emailCooldown}СЃ)` : "РџРѕР»СѓС‡РёС‚СЊ РєРѕРґ"}
+                    {phoneCooldown > 0 ? `Получить код (${phoneCooldown}с)` : "Получить код"}
                   </button>
                 ) : (
                   <>
                     <div className="auth-row">
-                      <label>РљРѕРґ</label>
-                      <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" />
+                      <label>Код</label>
+                      <input
+                        value={loginPhoneCode}
+                        onChange={(e) => setLoginPhoneCode(e.target.value)}
+                        placeholder="123456"
+                      />
                     </div>
-                    <button className="primary-button" type="button" onClick={submitEmail} disabled={busy}>
-                      РЎРѕР·РґР°С‚СЊ Р°РєРєР°СѓРЅС‚
+                    <button className="primary-button" type="button" onClick={verifyPhoneLoginCode} disabled={busy}>
+                      Войти
                     </button>
                   </>
                 )}
-                <button
-                  className="auth-link"
-                  type="button"
-                  onClick={() => {
-                    setEmailMode("login");
-                    resetCodes();
-                    setMsg(null);
-                  }}
-                >
-                  РЈР¶Рµ РµСЃС‚СЊ Р°РєРєР°СѓРЅС‚? Р’РѕР№С‚Рё
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="auth-row">
+              <label>Роль</label>
+              <div className="auth-seg">
+                <button type="button" className={role === "buyer" ? "active" : ""} onClick={() => setRole("buyer")}>
+                  Покупатель
                 </button>
-              </>
-            ) : (
-              <div className="auth-actions">
-                <button className="primary-button" type="button" onClick={submitEmail} disabled={busy}>
-                  Р’РѕР№С‚Рё
-                </button>
-                <button
-                  className="auth-link"
-                  type="button"
-                  onClick={() => {
-                    setEmailMode("register");
-                    resetCodes();
-                    setMsg(null);
-                  }}
-                >
-                  РќРµС‚ Р°РєРєР°СѓРЅС‚Р°? Р РµРіРёСЃС‚СЂР°С†РёСЏ
+                <button type="button" className={role === "supplier" ? "active" : ""} onClick={() => setRole("supplier")}>
+                  Поставщик
                 </button>
               </div>
-            )}
-          </div>
-
-          <div className={`auth-panel ${method === "phone" ? "active" : ""}`}>
-            <div className="auth-row">
-              <label>РўРµР»РµС„РѕРЅ</label>
-              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+996 ..." />
             </div>
-            {!phoneCodeSent ? (
-              <button
-                className="primary-button"
-                type="button"
-                onClick={sendPhoneCode}
-                disabled={busy || phoneCooldown > 0}
-              >
-                {phoneCooldown > 0 ? `РџРѕР»СѓС‡РёС‚СЊ РєРѕРґ (${phoneCooldown}СЃ)` : "РџРѕР»СѓС‡РёС‚СЊ РєРѕРґ"}
-              </button>
-            ) : (
-              <>
-                <div className="auth-row">
-                  <label>РљРѕРґ</label>
-                  <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" />
-                </div>
-                <div className="auth-row split">
-                  <div className="auth-col">
-                    <label>РРјСЏ</label>
-                    <input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+
+            <div className="auth-body">
+              <div className="auth-row">
+                <label>Email</label>
+                <input type="email" value={regEmail} onChange={(e) => setRegEmail(e.target.value)} placeholder="seller@usc.market" />
+              </div>
+              <div className="auth-row">
+                <label>Пароль</label>
+                <input
+                  type="password"
+                  value={regPassword}
+                  onChange={(e) => setRegPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+                {regPassword.length > 0 && (
+                  <div className="pwd-meter">
+                    <div className={`pwd-bar level-${Math.min(passwordScore, 5)}`} />
+                    <div className="pwd-label">{passwordLabel}</div>
                   </div>
-                  <div className="auth-col">
-                    <label>Р¤Р°РјРёР»РёСЏ</label>
-                    <input value={lastName} onChange={(e) => setLastName(e.target.value)} />
-                  </div>
+                )}
+              </div>
+              <div className="auth-row">
+                <label>Телефон (опционально)</label>
+                <input type="tel" value={regPhone} onChange={(e) => setRegPhone(e.target.value)} placeholder="+996 ..." />
+              </div>
+              <div className="auth-row split">
+                <div className="auth-col">
+                  <label>Имя</label>
+                  <input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
                 </div>
-                <div className="auth-row">
-                  <label>Email (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)</label>
-                  <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seller@usc.market" />
+                <div className="auth-col">
+                  <label>Фамилия</label>
+                  <input value={lastName} onChange={(e) => setLastName(e.target.value)} />
                 </div>
-                <button className="primary-button" type="button" onClick={verifyPhone} disabled={busy}>
-                  Р’РѕР№С‚Рё
+              </div>
+
+              {!emailCodeSent ? (
+                <button
+                  className="primary-button"
+                  type="button"
+                  onClick={sendRegisterEmailCode}
+                  disabled={busy || emailCooldown > 0}
+                >
+                  {emailCooldown > 0 ? `Получить код (${emailCooldown}с)` : "Получить код на email"}
                 </button>
-              </>
-            )}
-          </div>
-        </div>
+              ) : (
+                <>
+                  <div className="auth-row">
+                    <label>Код подтверждения</label>
+                    <input value={regCode} onChange={(e) => setRegCode(e.target.value)} placeholder="123456" />
+                  </div>
+                  <button className="primary-button" type="button" onClick={submitRegisterEmail} disabled={busy}>
+                    Создать аккаунт
+                  </button>
+                  <button className="auth-link" type="button" onClick={sendRegisterEmailCode} disabled={busy || emailCooldown > 0}>
+                    {emailCooldown > 0 ? `Отправить код повторно (${emailCooldown}с)` : "Отправить код повторно"}
+                  </button>
+                </>
+              )}
+            </div>
+          </>
+        )}
 
         {msg && <div className="auth-msg">{msg}</div>}
 
-        <div className="auth-test-box">
-          <div className="auth-test-title">РўРµСЃС‚РѕРІС‹Рµ Р°РєРєР°СѓРЅС‚С‹ (РІСЂРµРјРµРЅРЅРѕ)</div>
-          <div className="auth-test-subtitle">Р”Р»СЏ Р±С‹СЃС‚СЂРѕРіРѕ РІС…РѕРґР° Рё РїСЂРѕРІРµСЂРєРё Р°РЅР°Р»РёС‚РёРєРё. РџРѕС‚РѕРј СѓРґР°Р»РёРј.</div>
-          <div className="auth-test-list">
-            {TEST_ACCOUNTS.map((x) => (
-              <div key={x.email} className="auth-test-item">
-                <div className="auth-test-main">
-                  <div className="auth-test-email">{x.email}</div>
-                  <div className="auth-test-pass">{`РџР°СЂРѕР»СЊ: ${x.password}`}</div>
+        {authMode === "login" ? (
+          <div className="auth-test-box">
+            <div className="auth-test-title">Тестовые аккаунты (временно)</div>
+            <div className="auth-test-subtitle">Для быстрого входа и проверки аналитики. Потом удалим.</div>
+            <div className="auth-test-list">
+              {TEST_ACCOUNTS.map((x) => (
+                <div key={x.email} className="auth-test-item">
+                  <div className="auth-test-main">
+                    <div className="auth-test-email">{x.email}</div>
+                    <div className="auth-test-pass">{`Пароль: ${x.password}`}</div>
+                  </div>
+                  <div className="auth-test-meta">
+                    <span>{x.role}</span>
+                    <span>{`Продажи: ${x.sales}`}</span>
+                    {x.purchases > 0 ? <span>{`Покупки: ${x.purchases}`}</span> : null}
+                  </div>
                 </div>
-                <div className="auth-test-meta">
-                  <span>{x.role}</span>
-                  <span>{`РџСЂРѕРґР°Р¶Рё: ${x.sales}`}</span>
-                  {x.purchases > 0 ? <span>{`РџРѕРєСѓРїРєРё: ${x.purchases}`}</span> : null}
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </section>
   );
