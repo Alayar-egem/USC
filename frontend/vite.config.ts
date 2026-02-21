@@ -15,7 +15,7 @@ export default defineConfig({
     proxy: {
       // проксируем ТОЛЬКО API, НЕ /media
       "/api": {
-        target: "http://127.0.0.1:8000",
+        target: process.env.VITE_PROXY_TARGET || "http://127.0.0.1:8000",
         changeOrigin: true,
         secure: false,
       },
