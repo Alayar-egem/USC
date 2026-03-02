@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sentry_sdk
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -36,4 +37,5 @@ def get_current_user(
     if "is_active" in accounts_user.c and not row.get("is_active", True):
         raise HTTPException(401, detail="User inactive")
 
+    sentry_sdk.set_user({"id": str(row.get("id")), "email": str(row.get("email") or "")})
     return dict(row)

@@ -1,7 +1,8 @@
-﻿from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Response
 
 from app.cache.redis_cache import cache_status, quick_write_probe
 from app.core.config import settings
+from app.observability import get_metrics_payload
 from app.services.llm import llm_chat_json
 
 router = APIRouter(tags=["health"])
@@ -34,3 +35,11 @@ def health_llm():
         "configured": bool(settings.OPENAI_API_KEY),
         "ok": isinstance(out, dict),
     }
+
+
+@router.get("/metrics", include_in_schema=False)
+def metrics():
+    if not settings.METRICS_ENABLED:
+        raise HTTPException(status_code=404, detail="Metrics disabled")
+    payload, content_type = get_metrics_payload()
+    return Response(content=payload, media_type=content_type)

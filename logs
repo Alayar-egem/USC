@@ -152,3 +152,115 @@ Rule: Можно только дописывать новые записи в к
 Правило:
 - Этот logs файл остается append-only: удалять/изменять старые записи нельзя.
 
+[2026-02-28 11:55:20 +06:00] Git: created commit 0ae528d (feat: implement current plan items 23-27 (ci, tests, e2e)) and pushed main -> origin/main.
+[2026-02-28 12:13:15 +06:00]
+Изменения (пункты 17,19,28,29,30 current_plan):
+1) Пункт 17 (auto-refresh access на клиенте):
+- frontend/src/api/client.ts: добавлен централизованный forceLogout() (очистка токенов + session-expired event).
+- Сохранен single-flight refresh и retry-once для 401.
+- frontend/src/api/client.test.ts: добавлен сценарий параллельных 401 -> один refresh-запрос.
+
+2) Пункт 19 (убраны debug console logs):
+- Добавлен frontend/src/utils/logger.ts (dev-guard).
+- AuthScreen и CartScreen переведены с прямого console.error на logger.error.
+- Проверка rg по console.log/console.debug в frontend/src: прямых debug/log вызовов нет.
+
+3) Пункт 28 (метрики/наблюдаемость):
+- Добавлен backend/app/observability.py с метриками:
+  http_requests_total, http_request_duration_seconds, auth_login_attempts_total,
+  rate_limit_hits_total, db_query_failures_total.
+- backend/app/main.py: middleware теперь пишет http-метрики и сохраняет x-request-id.
+- backend/app/routers/health.py: добавлен GET /api/metrics (Prometheus format, управляется METRICS_ENABLED).
+- backend/app/security/rate_limit.py: добавлено наблюдение rate-limit hits.
+- backend/app/routers/auth.py: добавлено наблюдение login success/failure + db query failures (login path).
+- docker-compose.dev.yml / docker-compose.prod.yml: добавлены optional observability services (Prometheus, Grafana в dev) через profile observability.
+- Добавлен конфиг ops/prometheus/prometheus.yml.
+
+4) Пункт 29 (Sentry backend/frontend):
+- backend: подключен sentry-sdk в startup (env-driven), добавлен sanitizer before_send и теги service/request_id.
+- backend/app/deps/auth.py: добавлен sentry user context (id/email) для авторизованных запросов.
+- frontend: добавлен @sentry/react, файл frontend/src/monitoring.ts, инициализация в main.tsx + ErrorBoundary fallback.
+- Добавлены env-переменные Sentry в .env.example, .env.dev.example, .env.prod.example и backend/.env.example.
+
+5) Пункт 30 (backup/rollback БД):
+- Добавлены scripts/db: backup.sh, restore.sh, smoke_restore.sh, backup.ps1, restore.ps1, smoke_restore.ps1.
+- Добавлен runbook: docs/db-rollback-runbook.md (RPO/RTO, restore, rollback после неудачной миграции).
+- README дополнен разделами по observability, Sentry и backup/restore.
+
+Проверки:
+- python -m compileall backend/app -> успешно.
+- pytest backend/tests/test_health.py -q -> 4 passed.
+- frontend: npm run test:ci -> passed (6 tests).
+- frontend: npm run build -> passed.
+- frontend: npm run lint -> passed (1 legacy warning в AnalyticsScreen).
+- docker compose config для dev/prod override с JWT_SECRET_KEY -> успешно.
+
+Правило:
+- Этот logs файл остается append-only: удалять/изменять старые записи нельзя.
+[2026-02-28 12:28:19 +06:00] Updated backend/.env to a full safe template with all backend config fields (DB/API/JWT/Redis TTL/SMTP/LLM/Auth security/Observability/Sentry) for manual fill; removed sensitive literal values.
+[2026-02-28 12:30:40 +06:00] Fixed Docker env resolution issue: created root .env (compose scope), copied JWT_SECRET_KEY from backend/.env, added compose runtime vars; verified with 'docker compose -f docker-compose.yml -f docker-compose.dev.yml config' -> ok.
+[2026-02-28 12:37:49 +06:00] Fixed backend unhealthy startup: Alembic revision id exceeded alembic_version varchar(32). Updated migration revision from 0003_orders_hardening_audit_idempotency to 0003_orders_hardening_audit and adjusted 0004 down_revision. Restarted compose services; backend migrations completed and containers are healthy.
+[2026-02-28 12:40:44 +06:00] Fixed frontend runtime import error for @sentry/react in dev container: executed npm install inside usc-frontend to refresh /app/node_modules volume after dependency change; verified with npm run build inside container (success).
+[2026-02-28 12:45:12 +06:00] Diagnosed analytics AI fallback: backend runtime has no OPENAI_* env vars (confirmed via container env); /api/health/llm returned configured=false, ok=false. Fallback is due to missing/disabled provider key, not quota exhaustion.
+[2026-02-28 12:51:00 +06:00] Diagnosed AI chat structure issue: headings 'Почему так происходит'/'Что делать' are rendered by frontend whenever probable_causes/actions arrays are present (AIChatScreen). Backend fallback _assistant_answer always returns those arrays; runtime currently has no OPENAI_* env, so fallback/template path is used consistently.
+[2026-02-28 12:55:01 +06:00]
+Implemented conditional AI assistant sections and reduced fallback templating:
+- backend/app/routers/analytics.py:
+  - added _assistant_question_intent(question) to detect causes/actions intent.
+  - _assistant_answer no longer forces generic probable_causes/actions by default.
+  - fallback now builds raw signals only from real metrics/alerts/modules.
+  - response returns probable_causes only when question asks causes; actions only when question asks actions.
+  - if user explicitly asks causes/actions but no hard signal exists, returns one minimal neutral line for requested section only.
+- frontend/src/screens/AIChatScreen.tsx:
+  - added UI question-intent detection per assistant message using previous user prompt.
+  - section “Почему так происходит” renders only when user asked causes and data has causes.
+  - section “Что делать” renders only when user asked actions and data has actions.
+- tests:
+  - backend/tests/test_analytics_assistant.py: added 2 tests for causes-only and actions-only behavior.
+- validation:
+  - pytest backend/tests/test_analytics_assistant.py backend/tests/test_analytics_modules.py -q -> 9 passed.
+  - frontend npm run test:ci -> passed.
+  - frontend npm run build -> passed.
+  - frontend npm run lint -> passed (1 existing warning in AnalyticsScreen).
+[2026-02-28 12:58:05 +06:00] Fixed AI chat UI regression: restored separate sections rendering for probable_causes/actions based on data presence; added sanitizeAssistantSummary() to strip markdown '**' and trim embedded headings ('Что делать', 'Почему так происходит', etc.) from main assistant text; verified frontend build success.
+[2026-02-28 13:23:24 +06:00] UI update: removed text labels from bottom TabBar (icons-only navigation retained, cart badge kept). File: frontend/src/ui/TabBar.tsx. Verified with frontend build success.
+[2026-02-28 13:25:51 +06:00] Troubleshooting tabbar label update not visible: verified updated TabBar.tsx inside frontend container (labels removed), restarted frontend dev service and confirmed Vite dev server ready on :5173; likely browser/HMR cache issue requiring hard reload.
+[2026-02-28 13:28:19 +06:00] TabBar visual refinement: added permanent outer/inner outline on tabbar container and stronger active-tab contour while preserving indicator animation. File: frontend/src/styles/components.css. Verified frontend build success.
+[2026-02-28 13:29:45 +06:00] TabBar visibility follow-up: verified styles are applied in source/container; increased border/outline contrast significantly for clear visual difference and restarted frontend dev service.
+[2026-02-28 13:31:04 +06:00] Reverted recent global tabbar outline tweaks and implemented persistent per-tab boundaries: .tab now has always-visible inset border and active tab has stronger border. Restarted frontend dev container to apply changes immediately.
+[2026-02-28 13:33:55 +06:00] TabBar full redesign implemented:
+- Updated frontend/src/ui/TabBar.tsx structure with decorative layers (ambient/noise), richer moving indicator, tab core and ripple micro-interaction, aria-labels.
+- Reworked frontend/src/styles/components.css tabbar block with advanced visuals: multi-layer gradients, animated ambient conic glow, pulse/glow indicator, persistent per-tab outlines, hover/press interactions, active depth, animated badge, and reduced-motion fallback.
+- Verified frontend build success and restarted frontend dev container.
+[2026-02-28 13:36:08 +06:00] Fixed analytics assistant output contamination: added backend sanitization for LLM text to strip technical prefixes like 'analytics_modules.*' and markdown '**'; applied sanitizer to JSON and stream summary paths. Bumped assistant cache key version to v2 to avoid stale malformed cached responses. Added unit test for technical-prefix cleanup and restarted backend.
+[2026-02-28 13:37:58 +06:00] TabBar redesign v2 (clean premium style):
+- Reworked frontend/src/styles/components.css tabbar visuals to a restrained glass/liquid look (removed noisy/gaudy vibe), with subtle sheen animation, smooth active indicator, refined icon/press micro-interactions, and toned badge.
+- Updated frontend/src/ui/TabBar.tsx structure retained with decorative layers but set to cleaner behavior.
+- Verified frontend build success and restarted frontend container.
+[2026-02-28 13:41:17 +06:00] Rollback per user request to state near 'text removed' step: restored tabbar styling from base (reverted all later animation redesigns), kept only icons-only tabs (removed text labels). Rebuilt frontend and restarted dev frontend container.
+[2026-02-28 13:45:29 +06:00] TabBar redesign (mobile-first, no hover): implemented clean glass style with subtle highlight layer, smooth active indicator pill, tactile press-only animation (:active), refined icon sizing and badge styling. No hover effects added. Restarted frontend container and verified build success.
+[2026-02-28 13:47:19 +06:00] TabBar tone tweak: lightened tabbar background gradient and border/highlight layer for brighter appearance while keeping current mobile-first style.
+[2026-02-28 13:49:22 +06:00] TabBar tweak per user request: removed visible tabbar outline (border), restored previous darker tabbar gradient, and slightly increased tab icon size from 19px to 21px. Restarted frontend container.
+[2026-02-28 13:51:14 +06:00] TabBar accessibility style tweak: removed white focus-visible outline on .tab (box-shadow disabled). Restarted frontend container.
+[2026-02-28 13:53:00 +06:00] TabBar focus update: removed active indicator inner white ring (tabbar-indicator inset border set transparent) and added icon scale on focus/focus-visible (.tab-icon scales to 1.14, active focused to 1.16). Restarted frontend container.
+[2026-02-28 13:56:18 +06:00] TabBar icons updated from user-provided root SVGs: moved files into frontend/public/media/tabbar with English names (home.svg, cart.svg, analytics.svg, ai.svg, profile.svg), updated frontend/src/ui/TabBar.tsx icon paths to /media/tabbar/*, restarted frontend container.
+[2026-02-28 13:58:22 +06:00] TabBar icon brightness tweak: increased .tab-icon opacity (0.98) and added subtle white drop-shadow glow to make icons appear lighter. Restarted frontend container.
+[2026-02-28 14:01:13 +06:00] TabBar icon assets update: converted all 5 tabbar SVG source files (home/cart/analytics/ai/profile) to solid white by replacing gradient-based class styles with .st0/.st1 fill #FFFFFF and no stroke. Restarted frontend container.
+[2026-02-28 14:05:36 +06:00] Added animated tab screen transitions (mobile): checkpoint saved at ops/checkpoints/pre_screen_transition_attempt.patch; App.tsx now computes tab transition direction (forward/backward) and applies class on <main>. base.css now adds slide+fade keyframes for .screen.active with direction-aware classes and prefers-reduced-motion fallback. Frontend build passed and container restarted.
+[2026-02-28 14:07:22 +06:00] TabBar icon replacement: replaced home and analytics icons with new user-provided root SVGs by moving them to frontend/public/media/tabbar/home.svg and frontend/public/media/tabbar/analytics.svg (overwriting old files). Updated those two SVGs to solid white style by removing gradient strokes (stroke:none). Restarted frontend container.
+[2026-02-28 14:16:13 +06:00] Improved screen transition smoothness/determinism: removed idle transition phase and timeout in App.tsx (direction now only forward/backward), preventing double animation retrigger. Tuned base.css transitions to a single 240ms mobile slide+fade with smaller offset (10px), smoother easing, and will-change/backface-visibility for stable rendering. Frontend build passed and container restarted.
+[2026-02-28 14:17:40 +06:00] Screen transition smoothing v2: increased animation duration to 320ms, adjusted easing to cubic-bezier(0.22, 0.9, 0.2, 1), reduced slide offset to 6px, and softened fade start to opacity 0.5 for more fluid tab transitions.
+[2026-02-28 14:18:54 +06:00] Screen transition smoothing v3: removed slide transform entirely and switched to fade-only transition for deterministic smoothness on mobile. Updated .screen.active to 420ms cubic-bezier(0.16,1,0.3,1), will-change opacity only, and unified forward/backward to screenFadeOnly keyframe.
+[2026-02-28 14:23:14 +06:00] Reworked tab screen transitions to eliminate blinking: replaced keyframe fade with deterministic cross-transition (simultaneous outgoing/incoming opacity+translate) for tab screens (#screen-home/search/cart/analytics/ai/profile) using CSS transitions on absolute layers. Added App.tsx guard to apply tab-transition classes only when tab screens are active (not orders/supplier/drawer), preventing overlay conflicts. Frontend build passed and container restarted.
+[2026-02-28 14:54:23 +06:00] Fixed analytics screen height regression from transition system: removed absolute-layer crossfade approach in base.css (which broke document flow/min-height on long screens). Restored flow-based transitions on .screen.active with soft directional keyframes (8px translate + opacity) and reduced-motion fallback. Frontend build passed and container restarted.
+[2026-02-28 15:00:03 +06:00] Auth 401 reduction fix: updated frontend/src/api/client.ts with proactive access-token refresh before authenticated requests (if token missing or expiring within 20s). Added JWT exp parsing and preflight refresh path to avoid first-request 401 spikes and console noise; retained existing single-flight refresh and 401 fallback logout behavior. Verified with vitest (client.test.ts) and frontend build, restarted frontend container.
+[2026-02-28 15:04:02 +06:00] TabBar interaction fix: removed icon scaling on :focus/:focus-visible states to prevent long-press enlargement on mobile; kept icon enlargement only for selected tab (.tab.active .tab-icon -> scale 1.14 after tap/release state change). Restarted frontend container.
+[2026-02-28 15:05:59 +06:00] Screen transition tuning to reduce jank: shortened duration to 220ms, eased curve to cubic-bezier(0.2,0.8,0.2,1), reduced slide offset from 8px to 4px, softened fade from opacity 0.82, and added backface-visibility/translateZ(0) for smoother rendering on heavy screens.
+[2026-02-28 15:12:05 +06:00] Screen transition smoothing v5: switched to fade-only (removed all translate movement) for maximum smoothness on mobile. Updated duration to 300ms with gentle easing cubic-bezier(0.22,0.8,0.22,1), opacity-only animation from 0.55 to 1. Restarted frontend container.
+[2026-02-28 15:14:06 +06:00] Reworked screen transition to remove blink/glint: replaced fade-based effect with transform-only directional slide in base.css (forward/backward 10px -> 0), duration 260ms, easing cubic-bezier(0.2,0.85,0.25,1), will-change set to transform. Restarted frontend container.
+[2026-02-28 15:17:51 +06:00] Reworked tab transition per UX feedback: removed long single-screen slide animation (including accidental 5000ms behavior) and restored 'screen rebuild' feel using staggered block entrance on active tab screen children. Added screenBlockIn keyframe (opacity + upward settle + slight scale) with short nth-child delays for deterministic smooth arrival; kept reduced-motion fallback. Frontend build passed and container restarted.
+[2026-02-28 15:19:46 +06:00] Tab transition direction fix: replaced vertical block entrance with horizontal direction-aware animation in base.css. Forward tab transitions now animate content from left->center (screen feels moving right), backward transitions from right->center (screen feels moving left), with same staggered block delays preserved.
+[2026-02-28 15:22:30 +06:00] Enhanced Home categories animations in frontend/src/styles/screens.css: added masked edge fade for horizontal rail, animated category chip entrance (staggered repeating by 7n pattern), active chip glow capsule via ::before, subtle infinite pulse for active icon, and tactile tap press scaling. Kept mobile-first behavior (no hover dependencies). Frontend build passed and container restarted.
+[2026-02-28 15:27:22 +06:00] Asset switch: replaced red chain background references in frontend/src/styles/screens.css from /media/red_chain.jpg and /media/red_chain.webp to /media/red_chain_fixed.png. Renamed media file to frontend/public/media/red_chain_fixed.png for explicit extension compatibility. Restarted frontend container.
+[2026-03-02 09:50:09 +06:00] Serena enabled for project USC; onboarding status checked (already performed).
+[2026-03-02 10:18:33 +06:00] Rule update: Serena enable/activation events do not need to be logged going forward.

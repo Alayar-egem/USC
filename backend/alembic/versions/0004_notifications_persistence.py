@@ -1,7 +1,7 @@
 """add persistent notifications tables
 
 Revision ID: 0004_notifications_persistence
-Revises: 0003_orders_hardening_audit_idempotency
+Revises: 0003_orders_hardening_audit
 Create Date: 2026-02-28
 """
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0004_notifications_persistence"
-down_revision = "0003_orders_hardening_audit_idempotency"
+down_revision = "0003_orders_hardening_audit"
 branch_labels = None
 depends_on = None
 
@@ -53,4 +53,3 @@ def downgrade() -> None:
     op.drop_table("notification_user_state")
     op.drop_index("ix_notification_event_created_at", table_name="notification_event")
     op.drop_table("notification_event")
-

@@ -4,6 +4,7 @@ import asyncio
 from datetime import date, datetime, timedelta, timezone
 import httpx
 import json
+import re
 import threading
 from typing import AsyncIterator, Optional
 from urllib import request as urlrequest
@@ -48,6 +49,35 @@ def _pct_delta(prev: float, cur: float) -> float | None:
     return ((cur - prev) / prev) * 100
 
 
+def _assistant_question_intent(question: str) -> tuple[bool, bool]:
+    q = (question or "").lower()
+    cause_markers = [
+        "почему",
+        "причин",
+        "причина",
+        "из-за",
+        "отчего",
+        "why",
+        "reason",
+        "root cause",
+    ]
+    action_markers = [
+        "что делать",
+        "что мне делать",
+        "как улучш",
+        "как поднять",
+        "что посоветуешь",
+        "совет",
+        "план",
+        "действ",
+        "next step",
+        "action",
+    ]
+    wants_causes = any(marker in q for marker in cause_markers)
+    wants_actions = any(marker in q for marker in action_markers)
+    return wants_causes, wants_actions
+
+
 def _assistant_answer(summary: dict, question: str, selected_month: str | None) -> dict:
     sales = summary.get("sales_trends") or []
     market = summary.get("market_trends") or []
@@ -81,8 +111,8 @@ def _assistant_answer(summary: dict, question: str, selected_month: str | None) 
     top_cat_share = float(top_cat.get("share_pct") or 0) if top_cat else 0.0
     share = float(market_info.get("company_share_pct") or 0)
 
-    probable_causes: list[str] = []
-    actions: list[str] = []
+    raw_causes: list[str] = []
+    raw_actions: list[str] = []
     buyer_recommendations = summary.get("buyer_recommendations") or {}
     analytics_modules = summary.get("analytics_modules") or {}
     module_alerts = analytics_modules.get("alerts") or []
@@ -91,53 +121,44 @@ def _assistant_answer(summary: dict, question: str, selected_month: str | None) 
     reliable_suppliers = buyer_recommendations.get("reliable_suppliers") or []
 
     if mom is not None and mom <= -10:
-        probable_causes.append(
+        raw_causes.append(
             f"Выручка за последний месяц снизилась на {abs(mom):.1f}% к предыдущему периоду, это основной драйвер просадки."
         )
-        actions.append("Запустить короткое промо на 7-10 дней по топ-2 SKU для возврата объема.")
+        raw_actions.append("Запустить короткое промо на 7-10 дней по топ-2 SKU для возврата объема.")
     elif mom is not None and mom >= 8:
-        probable_causes.append(f"Наблюдается сильный рост MoM: +{mom:.1f}%, спрос ускоряется.")
-        actions.append(
+        raw_causes.append(f"Наблюдается сильный рост MoM: +{mom:.1f}%, спрос ускоряется.")
+        raw_actions.append(
             "Увеличить страховой остаток по лидирующим SKU, чтобы не потерять рост из-за out-of-stock."
-        )
-    else:
-        probable_causes.append(
-            "Изменение по месяцу умеренное, вероятнее всего это нормальная рыночная флуктуация."
-        )
-        actions.append(
-            "Поддерживать текущий прайс и контролировать подтверждение заказов в пиковые дни."
         )
 
     if cancel_rate >= 10:
-        probable_causes.append(f"Высокая доля отмен ({cancel_rate:.1f}%) съедает часть выручки.")
-        actions.append("Поставить SLA на подтверждение заказа до 30 минут и мониторить долю отмен ежедневно.")
+        raw_causes.append(f"Высокая доля отмен ({cancel_rate:.1f}%) съедает часть выручки.")
+        raw_actions.append("Поставить SLA на подтверждение заказа до 30 минут и мониторить долю отмен ежедневно.")
     if delivery_rate < 70:
-        probable_causes.append(f"Низкий delivery rate ({delivery_rate:.1f}%) ограничивает реализацию спроса.")
-        actions.append("Усилить контроль этапов CONFIRMED/DELIVERING, чтобы закрывать больше заказов в DELIVERED.")
+        raw_causes.append(f"Низкий delivery rate ({delivery_rate:.1f}%) ограничивает реализацию спроса.")
+        raw_actions.append("Усилить контроль этапов CONFIRMED/DELIVERING, чтобы закрывать больше заказов в DELIVERED.")
 
     if top_cat_share >= 55:
-        probable_causes.append(
+        raw_causes.append(
             f"Выручка сильно сконцентрирована в категории «{top_cat_name}» ({top_cat_share:.1f}%)."
         )
-        actions.append("Диверсифицировать ассортимент: добавить 2-3 SKU из второй по доле категории.")
-    else:
-        actions.append("Сфокусировать рекламу на категориях с долей >20% для максимального ROMI.")
+        raw_actions.append("Диверсифицировать ассортимент: добавить 2-3 SKU из второй по доле категории.")
 
     if share < 3:
-        probable_causes.append(f"Доля компании на рынке пока низкая ({share:.2f}%).")
-        actions.append("Забрать долю через ценовой тест: -3% на флагманские товары в течение 2 недель.")
+        raw_causes.append(f"Доля компании на рынке пока низкая ({share:.2f}%).")
+        raw_actions.append("Забрать долю через ценовой тест: -3% на флагманские товары в течение 2 недель.")
 
     if str(summary.get("role") or "").lower() == "buyer":
         if cheaper_alternatives:
             alt = cheaper_alternatives[0]
-            actions.append(
+            raw_actions.append(
                 f"Для {alt.get('anchor_product_name')} переключите часть закупок на "
                 f"{alt.get('candidate_supplier_name')} ({alt.get('candidate_product_name')}): "
                 f"экономия до {float(alt.get('savings_pct') or 0):.1f}%."
             )
         if reliable_suppliers:
             top_supplier = reliable_suppliers[0]
-            actions.append(
+            raw_actions.append(
                 f"Увеличьте долю заказов у {top_supplier.get('supplier_name')} "
                 f"(надежность {float(top_supplier.get('score') or 0):.1f}/100) для снижения операционного риска."
             )
@@ -146,14 +167,14 @@ def _assistant_answer(summary: dict, question: str, selected_month: str | None) 
         price_mod = supplier_module.get("price_competitiveness") or {}
         top_overpriced = (price_mod.get("top_overpriced_skus") or [None])[0]
         if top_overpriced:
-            actions.append(
+            raw_actions.append(
                 f"Скорректируйте цену на {top_overpriced.get('name')}: отклонение от медианы рынка "
                 f"{float(top_overpriced.get('gap_pct') or 0):.1f}%."
             )
 
     if module_alerts:
         alert = module_alerts[0]
-        probable_causes.append(
+        raw_causes.append(
             f"{str(alert.get('title') or 'Сигнал')}: {str(alert.get('message') or '').strip()}"
         )
     if module_actions:
@@ -165,7 +186,7 @@ def _assistant_answer(summary: dict, question: str, selected_month: str | None) 
                 impact_hint = f" Оценка эффекта: ~{float(impact_abs):.0f} сом."
             elif impact_pct is not None:
                 impact_hint = f" Оценка эффекта: ~{float(impact_pct):.1f}%."
-            actions.append(f"{str(action.get('title') or '')}: {str(action.get('rationale') or '').strip()}{impact_hint}")
+            raw_actions.append(f"{str(action.get('title') or '')}: {str(action.get('rationale') or '').strip()}{impact_hint}")
 
     if focus:
         fm = str(focus.get("month") or "")
@@ -189,7 +210,16 @@ def _assistant_answer(summary: dict, question: str, selected_month: str | None) 
             f"delivery {delivery_rate:.1f}%, отмены {cancel_rate:.1f}%."
         )
 
-    signal_count = len(probable_causes)
+    wants_causes, wants_actions = _assistant_question_intent(question)
+    if wants_causes and not raw_causes:
+        raw_causes.append("Существенных негативных отклонений в текущем срезе не обнаружено.")
+    if wants_actions and not raw_actions:
+        raw_actions.append("Поддерживайте текущую стратегию и мониторьте ключевые KPI ежедневно.")
+
+    probable_causes: list[str] = raw_causes[:4] if wants_causes else []
+    actions: list[str] = raw_actions[:5] if wants_actions else []
+
+    signal_count = len(raw_causes)
     confidence = min(0.95, max(0.55, 0.55 + signal_count * 0.07))
 
     return {
@@ -215,6 +245,35 @@ def _safe_float(value, default: float = 0.0) -> float:
         return float(value)
     except Exception:
         return default
+
+
+_TECH_PREFIX_RE = re.compile(r"^\s*(?:\d+\.\s*)?analytics_modules\.[^:]+:\s*", flags=re.IGNORECASE)
+
+
+def _sanitize_assistant_line(text: str) -> str:
+    clean = str(text or "").replace("**", "").strip()
+    if not clean:
+        return ""
+    clean = _TECH_PREFIX_RE.sub("", clean)
+    clean = re.sub(r"\s{2,}", " ", clean).strip()
+    return clean
+
+
+def _sanitize_assistant_list(values: list[str], *, limit: int) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        clean = _sanitize_assistant_line(str(raw))
+        if not clean:
+            continue
+        dedup = clean.lower()
+        if dedup in seen:
+            continue
+        seen.add(dedup)
+        out.append(clean)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def _looks_analytics_question(question: str) -> bool:
@@ -478,10 +537,13 @@ def _llm_assistant_answer(
         if not isinstance(out, dict):
             return None
         metrics = out.get("metrics") or {}
+        summary_text = _sanitize_assistant_line(str(out.get("summary") or ""))
+        probable_causes = _sanitize_assistant_list([str(x) for x in (out.get("probable_causes") or [])], limit=4)
+        actions = _sanitize_assistant_list([str(x) for x in (out.get("actions") or [])], limit=5)
         return {
-            "summary": str(out.get("summary") or ""),
-            "probable_causes": [str(x) for x in (out.get("probable_causes") or [])][:4],
-            "actions": [str(x) for x in (out.get("actions") or [])][:5],
+            "summary": summary_text,
+            "probable_causes": probable_causes,
+            "actions": actions,
             "confidence": max(0.0, min(1.0, _safe_float(out.get("confidence"), 0.7))),
             "focus_month": out.get("focus_month"),
             "show_metrics": bool(out.get("show_metrics", True)),
@@ -1466,6 +1528,7 @@ def _analytics_assistant_cache_key(
         company_id,
         role,
         days,
+        "v2",
         selected_month or "_",
         q_hash,
     )
@@ -1951,7 +2014,7 @@ async def analytics_assistant_query_stream(
 
         if yielded_any and streamed_text.strip():
             out = _assistant_answer(summary=summary, question=payload.question, selected_month=payload.selected_month)
-            out["summary"] = streamed_text.strip()
+            out["summary"] = _sanitize_assistant_line(streamed_text.strip())
             set_json(assistant_cache_key, out, settings.CACHE_TTL_ANALYTICS_ASSISTANT)
             yield _ndjson_event({"type": "done", "data": out})
             return

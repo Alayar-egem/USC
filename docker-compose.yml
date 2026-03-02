@@ -56,6 +56,11 @@ services:
       EMAIL_CODE_LENGTH: ${EMAIL_CODE_LENGTH:-6}
       EMAIL_CODE_DEV_FALLBACK: ${EMAIL_CODE_DEV_FALLBACK:-false}
       AUTO_SEED_DEMO: ${AUTO_SEED_DEMO:-false}
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      SENTRY_DSN_BACKEND: ${SENTRY_DSN_BACKEND:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-dev}
+      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.0}
     ports:
       - "8000:8000"
     healthcheck:
@@ -80,6 +85,10 @@ services:
     environment:
       VITE_API_BASE: ${VITE_API_BASE:-/api}
       VITE_PROXY_TARGET: ${VITE_PROXY_TARGET:-http://backend:8000}
+      VITE_SENTRY_DSN_FRONTEND: ${VITE_SENTRY_DSN_FRONTEND:-}
+      VITE_SENTRY_ENVIRONMENT: ${VITE_SENTRY_ENVIRONMENT:-dev}
+      VITE_SENTRY_RELEASE: ${VITE_SENTRY_RELEASE:-}
+      VITE_SENTRY_TRACES_SAMPLE_RATE: ${VITE_SENTRY_TRACES_SAMPLE_RATE:-0.0}
     ports:
       - "5173:5173"
     working_dir: /app
@@ -89,4 +98,3 @@ services:
 volumes:
   usc_pg_data:
   usc_redis_data:
-

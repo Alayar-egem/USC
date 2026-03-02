@@ -1,4 +1,4 @@
-/* ===========================
+﻿/* ===========================
    HOME
    =========================== */
 
@@ -19,9 +19,9 @@
   pointer-events: none;
   opacity: 0.13;
   background-image:
-    url("/media/red_chain.jpg"),
-    url("/media/red_chain.jpg"),
-    url("/media/red_chain.jpg"),
+    url("/media/red_chain_fixed.png"),
+    url("/media/red_chain_fixed.png"),
+    url("/media/red_chain_fixed.png"),
     linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.22));
   background-repeat: repeat-x, repeat-x, repeat-x, no-repeat;
   background-size:
@@ -89,9 +89,9 @@
   pointer-events: none;
   opacity: 0.13;
   background-image:
-    url("/media/red_chain.jpg"),
-    url("/media/red_chain.jpg"),
-    url("/media/red_chain.jpg");
+    url("/media/red_chain_fixed.png"),
+    url("/media/red_chain_fixed.png"),
+    url("/media/red_chain_fixed.png");
   background-repeat: repeat-x, repeat-x, repeat-x;
   background-size: 230px auto, 230px auto, 230px auto;
   background-position:
@@ -137,6 +137,7 @@
   padding: 16px 16px 16px;
   margin: 0;
   scroll-snap-type: none;
+  mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
 }
 .categories::-webkit-scrollbar {
   display: none;
@@ -151,6 +152,28 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  border-radius: 999px;
+  position: relative;
+  padding: 0 7px;
+  transform: translateY(0) scale(1);
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.category::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 999px;
+  background: linear-gradient(140deg, rgba(136, 181, 255, 0.3), rgba(95, 144, 255, 0.18));
+  box-shadow:
+    0 8px 18px rgba(36, 74, 150, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  opacity: 0;
+  transform: scale(0.9);
+  transition:
+    opacity 260ms ease,
+    transform 260ms cubic-bezier(0.22, 0.9, 0.2, 1);
+  pointer-events: none;
 }
 
 .category img {
@@ -159,14 +182,39 @@
   transition:
     filter 0.15s ease-out,
     opacity 0.15s ease-out,
-    box-shadow 0.15s ease-out,
-    transform 0.15s ease-out;
+    box-shadow 0.2s ease-out,
+    transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.screen.active .categories .category {
+  animation: categoryEnter 380ms cubic-bezier(0.22, 0.9, 0.2, 1) both;
+}
+
+.screen.active .categories .category:nth-child(7n + 1) { animation-delay: 0ms; }
+.screen.active .categories .category:nth-child(7n + 2) { animation-delay: 28ms; }
+.screen.active .categories .category:nth-child(7n + 3) { animation-delay: 56ms; }
+.screen.active .categories .category:nth-child(7n + 4) { animation-delay: 84ms; }
+.screen.active .categories .category:nth-child(7n + 5) { animation-delay: 112ms; }
+.screen.active .categories .category:nth-child(7n + 6) { animation-delay: 140ms; }
+.screen.active .categories .category:nth-child(7n + 7) { animation-delay: 168ms; }
+
+.category:active {
+  transform: translateY(1px) scale(0.96);
 }
 
 .category.active img {
   filter: none;
   opacity: 1;
-  transform: translateZ(0);
+  transform: translateZ(0) scale(1.06);
+}
+
+.category.active::before {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.category.active:not(.category-search) img {
+  animation: categoryActivePulse 1.9s ease-in-out infinite;
 }
 
 .category-search img {
@@ -175,6 +223,31 @@
   background: #e5e7eb;
   padding: 6px;
   border-radius: 999px;
+}
+
+.category-search::before {
+  display: none;
+}
+
+@keyframes categoryEnter {
+  from {
+    opacity: 0;
+    transform: translate3d(8px, 0, 0) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes categoryActivePulse {
+  0%,
+  100% {
+    transform: translateZ(0) scale(1.06);
+  }
+  50% {
+    transform: translateZ(0) scale(1.12);
+  }
 }
 
 .premium-banner {
@@ -621,7 +694,7 @@
 }
 
 .search-list li::before {
-  content: "🔍";
+  content: "рџ”Ќ";
   font-size: 14px;
 }
 
@@ -3128,11 +3201,11 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 140px); /* чтобы белый блок визуально тянулся вниз */
+  min-height: calc(100vh - 140px); /* С‡С‚РѕР±С‹ Р±РµР»С‹Р№ Р±Р»РѕРє РІРёР·СѓР°Р»СЊРЅРѕ С‚СЏРЅСѓР»СЃСЏ РІРЅРёР· */
   margin-bottom: 50px;
 }
 
-/* top (внутри карточки) */
+/* top (РІРЅСѓС‚СЂРё РєР°СЂС‚РѕС‡РєРё) */
 .cart-top {
   padding: 18px 18px 10px;
 }
@@ -4076,7 +4149,7 @@
 }
 
 /* ===========================
-   SUPPLIERS — same style as your CSS
+   SUPPLIERS вЂ” same style as your CSS
    =========================== */
 
 .supplier-list {
@@ -4097,7 +4170,7 @@
   justify-content: space-between;
   gap: 10px;
 
-  min-width: 0; /* важно чтобы ellipsis работал */
+  min-width: 0; /* РІР°Р¶РЅРѕ С‡С‚РѕР±С‹ ellipsis СЂР°Р±РѕС‚Р°Р» */
 }
 
 .supplier-left {
@@ -4129,7 +4202,7 @@
 }
 
 .supplier-name {
-  font-weight: 700;           /* как общий вайб у тебя */
+  font-weight: 700;           /* РєР°Рє РѕР±С‰РёР№ РІР°Р№Р± Сѓ С‚РµР±СЏ */
   font-size: 13px;
   color: #111827;
   line-height: 1.15;
@@ -4147,7 +4220,7 @@
   text-overflow: ellipsis;
 }
 
-/* кнопка в точности как твой .primary-button */
+/* РєРЅРѕРїРєР° РІ С‚РѕС‡РЅРѕСЃС‚Рё РєР°Рє С‚РІРѕР№ .primary-button */
 .supplier-open {
   border: none;
   border-radius: 999px;
@@ -4164,7 +4237,7 @@
   transform: scale(0.98);
 }
 
-/* ===== responsive в твоём стиле ===== */
+/* ===== responsive РІ С‚РІРѕС‘Рј СЃС‚РёР»Рµ ===== */
 @media (max-width: 360px) {
   .supplier-card {
     padding: 9px 10px;
@@ -4196,7 +4269,7 @@
 }
 
 
-/* поля */
+/* РїРѕР»СЏ */
 .field {
   display: flex;
   flex-direction: column;
@@ -4232,7 +4305,7 @@ textarea.field-input {
   line-height: 1.35;
 }
 
-/* итого */
+/* РёС‚РѕРіРѕ */
 .modal-total {
   margin-top: 2px;
   padding: 10px 12px;
@@ -4249,7 +4322,7 @@ textarea.field-input {
   font-size: 14px;
 }
 
-/* primary button — как твой .primary-button */
+/* primary button вЂ” РєР°Рє С‚РІРѕР№ .primary-button */
 .modal-primary {
   margin-top: 2px;
   width: 100%;
@@ -4274,12 +4347,12 @@ textarea.field-input {
 }
 
 /* ===========================
-   RESPONSIVE — in your style
+   RESPONSIVE вЂ” in your style
    =========================== */
 
 @media (min-width: 421px) {
   .modal-backdrop {
-    align-items: center; /* на больших экранах по центру */
+    align-items: center; /* РЅР° Р±РѕР»СЊС€РёС… СЌРєСЂР°РЅР°С… РїРѕ С†РµРЅС‚СЂСѓ */
   }
 }
 
@@ -4602,14 +4675,14 @@ textarea.field-input {
   inset: 0;
   background-image:
     linear-gradient(180deg, rgba(255, 255, 255, 0.44) 0%, rgba(255, 255, 255, 0.2) 42%, rgba(255, 255, 255, 0.42) 100%),
-    url("/media/red_chain.jpg"),
-    url("/media/red_chain.jpg"),
-    url("/media/red_chain.jpg"),
-    url("/media/red_chain.jpg"),
-    url("/media/red_chain.jpg"),
-    url("/media/red_chain.jpg"),
-    url("/media/red_chain.jpg"),
-    url("/media/red_chain.jpg");
+    url("/media/red_chain_fixed.png"),
+    url("/media/red_chain_fixed.png"),
+    url("/media/red_chain_fixed.png"),
+    url("/media/red_chain_fixed.png"),
+    url("/media/red_chain_fixed.png"),
+    url("/media/red_chain_fixed.png"),
+    url("/media/red_chain_fixed.png"),
+    url("/media/red_chain_fixed.png");
   background-repeat: no-repeat, repeat-x, repeat-x, repeat-x, repeat-x, repeat-x, repeat-x, repeat-x, repeat-x;
   background-size:
     100% 100%,
@@ -7518,3 +7591,4 @@ textarea.field-input {
   font-size: 12px;
   color: #6b7280;
 }
+

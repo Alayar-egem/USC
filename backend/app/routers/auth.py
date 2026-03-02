@@ -16,6 +16,7 @@ from app.db.schema import companies_company as companies
 from app.db.schema import companies_companymember as company_members
 from app.core.config import settings
 from app.deps.auth import get_current_user
+from app.observability import observe_db_query_failure, observe_login_attempt
 from app.security.auth_guard import AuthGuardError, auth_guard
 from app.security.rate_limit import RateLimitError, RateLimitRule, rate_limit
 from app.security.refresh_sessions import (
@@ -372,10 +373,13 @@ def login(payload: LoginPayload, request: Request, db: Session = Depends(get_db)
         ],
     )
     _auth_guard_precheck(scope="login", target=email, ip=ip, captcha_token=payload.captcha_token)
-    u = db.execute(
-        select(users).where(_col("email") == email)
-    ).mappings().first()
+    try:
+        u = db.execute(select(users).where(_col("email") == email)).mappings().first()
+    except Exception:
+        observe_db_query_failure(endpoint="auth_login")
+        raise
     if not u:
+        observe_login_attempt(result="failure")
         log_audit_event(
             db,
             domain="auth",
@@ -391,6 +395,7 @@ def login(payload: LoginPayload, request: Request, db: Session = Depends(get_db)
         _raise_after_failure(scope="login", target=email, ip=ip, status_code=401, detail="Invalid credentials")
 
     if not verify_legacy_password(payload.password, str(u.get("password") or "")):
+        observe_login_attempt(result="failure")
         log_audit_event(
             db,
             domain="auth",
@@ -408,6 +413,7 @@ def login(payload: LoginPayload, request: Request, db: Session = Depends(get_db)
 
     role = _get_role_from_row(u) or None
     _auth_guard_success(scope="login", target=email, ip=ip)
+    observe_login_attempt(result="success")
     pair = _issue_token_pair(
         db,
         user_id=int(u.get("id")),

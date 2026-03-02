@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 import { createOrder } from "../api/orders";
 import type { ToastTone } from "../hooks/useToast";
 import type { CartItem } from "../types";
+import MapPicker from "../ui/MapPicker";
 import TopHeader from "../ui/TopHeader";
+import { appendGeoTag, isValidLatLng, type LatLng } from "../utils/geo";
+import { logger } from "../utils/logger";
 
 type DeliveryMode = "YANDEX" | "SUPPLIER_COURIER" | "BUYER_COURIER";
 
@@ -37,12 +40,36 @@ export default function CartScreen({
   const [creating, setCreating] = useState(false);
   const [address, setAddress] = useState("\u0423\u043b\u0438\u0446\u0430 \u041c\u0435\u0434\u0435\u0440\u043e\u0432\u0430, 161\u0430");
   const [comment, setComment] = useState("");
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [coords, setCoords] = useState<LatLng | null>(null);
+  const [latInput, setLatInput] = useState("");
+  const [lngInput, setLngInput] = useState("");
+  const [mapError, setMapError] = useState<string | null>(null);
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("SUPPLIER_COURIER");
 
   const itemsCount = useMemo(() => items.reduce((acc, it) => acc + it.qty, 0), [items]);
   const canCheckout = !creating && itemsCount > 0 && Boolean(buyerCompanyId);
   const canSubmitOrder = canCheckout && address.trim().length > 0;
+
+  const syncCoordsFromInputs = (nextLatRaw: string, nextLngRaw: string) => {
+    const lat = Number(nextLatRaw.replace(",", "."));
+    const lng = Number(nextLngRaw.replace(",", "."));
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      setCoords(null);
+      return;
+    }
+    const next = { lat, lng };
+    if (!isValidLatLng(next)) {
+      setCoords(null);
+      return;
+    }
+    setCoords(next);
+  };
+
+  const applyCoords = (next: LatLng | null) => {
+    setCoords(next);
+    setLatInput(next ? next.lat.toFixed(6) : "");
+    setLngInput(next ? next.lng.toFixed(6) : "");
+  };
 
   const submitOrder = async () => {
     if (!canSubmitOrder) return;
@@ -70,8 +97,7 @@ export default function CartScreen({
       return;
     }
 
-    const geo = coords ? `\n[geo:${coords.lat.toFixed(6)},${coords.lng.toFixed(6)}]` : "";
-    const finalComment = `${comment.trim()}${geo}`.trim();
+    const finalComment = appendGeoTag(comment, coords);
 
     try {
       setCreating(true);
@@ -92,7 +118,7 @@ export default function CartScreen({
       onCheckoutSuccess();
       onNotify("\u0417\u0430\u043a\u0430\u0437 \u0443\u0441\u043f\u0435\u0448\u043d\u043e \u0441\u043e\u0437\u0434\u0430\u043d", "success");
     } catch (e) {
-      console.error(e);
+      logger.error(e);
       onNotify(
         "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0441\u043e\u0437\u0434\u0430\u0442\u044c \u0437\u0430\u043a\u0430\u0437. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 backend /api/orders/create/",
         "error"
@@ -239,32 +265,44 @@ export default function CartScreen({
 
                 <div className="field">
                   <div className="field-label">{"\u041a\u043e\u043e\u0440\u0434\u0438\u043d\u0430\u0442\u044b (\u043e\u043f\u0446\u0438\u043e\u043d\u0430\u043b\u044c\u043d\u043e)"}</div>
+                  <MapPicker
+                    value={coords}
+                    disabled={creating}
+                    onChange={(next) => {
+                      applyCoords(next);
+                      setMapError(null);
+                    }}
+                    onError={(message) => setMapError(message)}
+                  />
                   <div className="coords-row">
                     <input
                       className="field-input"
                       placeholder={"\u0428\u0438\u0440\u043e\u0442\u0430"}
-                      value={coords ? coords.lat : ""}
+                      value={latInput}
                       onChange={(e) => {
-                        const v = Number(e.target.value);
-                        if (Number.isFinite(v)) setCoords({ lat: v, lng: coords?.lng ?? 0 });
-                        else setCoords(null);
+                        const nextLat = e.target.value;
+                        setLatInput(nextLat);
+                        syncCoordsFromInputs(nextLat, lngInput);
                       }}
                       disabled={creating}
                     />
                     <input
                       className="field-input"
                       placeholder={"\u0414\u043e\u043b\u0433\u043e\u0442\u0430"}
-                      value={coords ? coords.lng : ""}
+                      value={lngInput}
                       onChange={(e) => {
-                        const v = Number(e.target.value);
-                        if (Number.isFinite(v)) setCoords({ lat: coords?.lat ?? 0, lng: v });
-                        else setCoords(null);
+                        const nextLng = e.target.value;
+                        setLngInput(nextLng);
+                        syncCoordsFromInputs(latInput, nextLng);
                       }}
                       disabled={creating}
                     />
                   </div>
 
                   <div className="map-actions">
+                    <span className={`map-badge ${coords ? "ok" : ""}`}>
+                      {coords ? "\u0422\u043e\u0447\u043a\u0430 \u0432\u044b\u0431\u0440\u0430\u043d\u0430" : "\u0422\u043e\u0447\u043a\u0430 \u043d\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u0430"}
+                    </span>
                     <button
                       className="btn-secondary"
                       type="button"
@@ -272,7 +310,13 @@ export default function CartScreen({
                       onClick={() => {
                         if (!navigator.geolocation) return;
                         navigator.geolocation.getCurrentPosition(
-                          (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                          (pos) => {
+                            applyCoords({
+                              lat: Number(pos.coords.latitude.toFixed(6)),
+                              lng: Number(pos.coords.longitude.toFixed(6)),
+                            });
+                            setMapError(null);
+                          },
                           () => {
                             // ignore geolocation errors
                           }
@@ -281,18 +325,8 @@ export default function CartScreen({
                     >
                       {"\u041e\u043f\u0440\u0435\u0434\u0435\u043b\u0438\u0442\u044c \u043c\u043e\u044e \u0433\u0435\u043e\u043f\u043e\u0437\u0438\u0446\u0438\u044e"}
                     </button>
-
-                    {coords && (
-                      <a
-                        className="map-link"
-                        href={`https://www.openstreetmap.org/?mlat=${coords.lat}&mlon=${coords.lng}#map=16/${coords.lat}/${coords.lng}`}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        {"\u041e\u0442\u043a\u0440\u044b\u0442\u044c \u043d\u0430 \u043a\u0430\u0440\u0442\u0435"}
-                      </a>
-                    )}
                   </div>
+                  {mapError ? <div className="map-hint map-error">{mapError}</div> : null}
                 </div>
 
                 <label className="field">
@@ -336,3 +370,6 @@ export default function CartScreen({
     </section>
   );
 }
+
+
+

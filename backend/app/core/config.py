@@ -69,6 +69,12 @@ class Settings(BaseSettings):
     AUTH_LOCKOUT_STEP2_SECONDS: int = 3600
     AUTH_LOCKOUT_STEP3_SECONDS: int = 86400
     IDEMPOTENCY_TTL_HOURS: int = 24
+    METRICS_ENABLED: bool = True
+
+    SENTRY_DSN_BACKEND: str = ""
+    SENTRY_ENVIRONMENT: str = "dev"
+    SENTRY_RELEASE: str = ""
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.0
 
     model_config = SettingsConfigDict(
         env_file=str(BASE_DIR / ".env"),

@@ -35,6 +35,29 @@ function makeTitle(text: string) {
   return normalized.length > 46 ? `${normalized.slice(0, 46)}…` : normalized;
 }
 
+function sanitizeAssistantSummary(text: string): string {
+  const clean = (text || "").replace(/\*\*/g, "").trim();
+  if (!clean) return "";
+  const lines = clean.split("\n");
+  const sectionMarkers = [
+    "что делать",
+    "почему так происходит",
+    "практические шаги",
+    "рекомендации",
+    "действия",
+  ];
+  let cutoff = lines.length;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i].trim().toLowerCase();
+    if (sectionMarkers.some((marker) => line.startsWith(marker))) {
+      cutoff = i;
+      break;
+    }
+  }
+  const summary = lines.slice(0, cutoff).join("\n").trim();
+  return summary || clean;
+}
+
 export default function AIChatScreen({
   active,
   cartCount,
@@ -439,42 +462,49 @@ export default function AIChatScreen({
           </div>
           <div className="ai-history" ref={historyRef}>
             {currentSession?.messages.length ? (
-              currentSession.messages.map((m) => (
+              currentSession.messages.map((m) => {
+                const showCauses = m.role === "assistant" && !!m.data?.probable_causes?.length;
+                const showActions = m.role === "assistant" && !!m.data?.actions?.length;
+                const assistantText = m.role === "assistant" ? sanitizeAssistantSummary(m.text) : m.text;
+                return (
                 <div key={m.id} className={`ai-msg ${m.role} ${m.id === streamingAssistantId ? "is-streaming" : ""}`}>
                   <div className={`ai-msg-text ${m.role === "assistant" && (revealedCharsByMsgId[m.id] ?? 0) < m.text.length ? "revealing" : ""}`}>
                     {m.id === streamingAssistantId && !m.text ? (
                       <span className="ai-typing"><span /><span /><span /></span>
                     ) : (
                       <>
-                        {m.role === "assistant" ? m.text.slice(0, revealedCharsByMsgId[m.id] ?? 0) : m.text}
+                        {m.role === "assistant"
+                          ? assistantText.slice(0, Math.min(revealedCharsByMsgId[m.id] ?? 0, assistantText.length))
+                          : m.text}
                         {m.role === "assistant" && (revealedCharsByMsgId[m.id] ?? 0) < m.text.length ? (
                           <span className="ai-reveal-caret" aria-hidden="true" />
                         ) : null}
                       </>
                     )}
                   </div>
-                  {m.role === "assistant" && m.data?.probable_causes?.length ? (
+                  {showCauses ? (
                     <div className="ai-msg-section">
                       <div className="ai-msg-section-title">Почему так происходит</div>
                       <ul className="ai-msg-list">
-                        {m.data.probable_causes.slice(0, 4).map((x, idx) => (
+                        {m.data?.probable_causes?.slice(0, 4).map((x, idx) => (
                           <li key={`${m.id}-cause-${idx}`}>{x}</li>
                         ))}
                       </ul>
                     </div>
                   ) : null}
-                  {m.role === "assistant" && m.data?.actions?.length ? (
+                  {showActions ? (
                     <div className="ai-msg-section">
                       <div className="ai-msg-section-title">Что делать</div>
                       <ul className="ai-msg-list ai-msg-list-actions">
-                        {m.data.actions.slice(0, 5).map((x, idx) => (
+                        {m.data?.actions?.slice(0, 5).map((x, idx) => (
                           <li key={`${m.id}-action-${idx}`}>{x}</li>
                         ))}
                       </ul>
                     </div>
                   ) : null}
                 </div>
-              ))
+              );
+              })
             ) : (
               <div className="ai-empty-chat">
                 {companyId ? "Выберите чат или начните новый диалог." : "Сначала выберите компанию, чтобы AI видел аналитику."}

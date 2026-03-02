@@ -20,6 +20,18 @@ Use base + prod override:
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
+### With observability stack (optional)
+
+Add `--profile observability` to include Prometheus (and Grafana in dev):
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile observability up -d --build
+```
+
+Open:
+- Prometheus: http://localhost:9090
+- Grafana (dev): http://localhost:3000
+
 ## Stop (any profile)
 
 ```powershell
@@ -56,6 +68,38 @@ Recommended minimum:
 - high entropy random string (letters + numbers + symbols)
 - never commit to git
 
+## Metrics and tracing
+
+- Backend metrics endpoint: `GET /api/metrics` (Prometheus format).
+- Request correlation: backend returns `x-request-id` response header and logs it.
+- Important metric families:
+  - `http_requests_total`
+  - `http_request_duration_seconds`
+  - `auth_login_attempts_total`
+  - `rate_limit_hits_total`
+  - `db_query_failures_total`
+
+Alert hints:
+- sustained growth of 5xx statuses in `http_requests_total`
+- spikes in `rate_limit_hits_total`
+- p95 latency growth in `http_request_duration_seconds`
+
+## Sentry integration
+
+Backend env:
+- `SENTRY_DSN_BACKEND`
+- `SENTRY_ENVIRONMENT`
+- `SENTRY_RELEASE`
+- `SENTRY_TRACES_SAMPLE_RATE`
+
+Frontend env:
+- `VITE_SENTRY_DSN_FRONTEND`
+- `VITE_SENTRY_ENVIRONMENT`
+- `VITE_SENTRY_RELEASE`
+- `VITE_SENTRY_TRACES_SAMPLE_RATE`
+
+If DSN is empty, Sentry stays disabled.
+
 ## Seed demo data manually
 
 ```powershell
@@ -90,6 +134,21 @@ docker exec usc-redis redis-cli ping
 ```
 
 Expected Redis response: `PONG`.
+
+## DB backup / restore
+
+Daily full backup + manual pre-release backup is the MVP default policy.
+
+Commands:
+- Backup (Linux/macOS): `bash scripts/db/backup.sh`
+- Backup (Windows): `powershell -ExecutionPolicy Bypass -File scripts/db/backup.ps1`
+- Restore (Linux/macOS): `bash scripts/db/restore.sh backups/<file>.dump`
+- Restore (Windows): `powershell -ExecutionPolicy Bypass -File scripts/db/restore.ps1 -DumpFile backups/<file>.dump`
+- Smoke restore on temp DB:
+  - Linux/macOS: `bash scripts/db/smoke_restore.sh backups/<file>.dump`
+  - Windows: `powershell -ExecutionPolicy Bypass -File scripts/db/smoke_restore.ps1 -DumpFile backups/<file>.dump`
+
+Detailed rollback instructions: `docs/db-rollback-runbook.md`.
 
 ## CI/Test baseline
 

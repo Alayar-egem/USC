@@ -28,6 +28,8 @@ import { isApiError, SESSION_EXPIRED_EVENT } from "./api/client";
 import { fetchNotifications } from "./api/notifications";
 import { fetchMe, type MeProfile } from "./api/profile";
 
+const TAB_ORDER: TabKey[] = ["home", "cart", "analytics", "ai", "profile"];
+
 function hashSeed(input: string): number {
   let h = 0;
   for (let i = 0; i < input.length; i += 1) {
@@ -45,6 +47,7 @@ export default function App() {
   const initialAuthed = !!localStorage.getItem("usc_access_token");
   const [authed, setAuthed] = useState(initialAuthed);
   const [activeTab, setActiveTab] = useState<TabKey>("home");
+  const [tabTransitionDir, setTabTransitionDir] = useState<"forward" | "backward">("forward");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerScreen, setDrawerScreen] = useState<Screen | null>(null);
   const [companyPickerOpen, setCompanyPickerOpen] = useState(false);
@@ -290,6 +293,13 @@ export default function App() {
     setSupplierView(null);
     setDrawerScreen(null);
 
+    if (tab !== activeTab) {
+      const fromIndex = TAB_ORDER.indexOf(activeTab);
+      const toIndex = TAB_ORDER.indexOf(tab);
+      if (fromIndex >= 0 && toIndex >= 0) {
+        setTabTransitionDir(toIndex > fromIndex ? "forward" : "backward");
+      }
+    }
     setActiveTab(tab);
     if (tab === "search") setSearchPreset({ categoryId: null });
     closeDrawer();
@@ -345,6 +355,7 @@ export default function App() {
 
   const screensLocked = !!supplierView || ordersOpen || !!drawerScreen;
   const keepSplashVisible = authed && (!splashAnimationDone || profileLoading);
+  const screensClassName = `screens ${!screensLocked ? `tab-transition-${tabTransitionDir}` : ""}`.trim();
 
   if (!authed) {
     return (
@@ -406,7 +417,7 @@ export default function App() {
         completedOrders={reputation.completedOrders}
       />
 
-      <main className="screens">
+      <main className={screensClassName}>
         <HomeScreen
           active={!screensLocked && activeTab === "home"}
           cartCount={cart.count}

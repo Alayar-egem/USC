@@ -20,3 +20,39 @@ services:
     command: >
       sh -c "npm run dev -- --host=0.0.0.0 --port=5173 --strictPort"
 
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: usc-prometheus
+    restart: unless-stopped
+    profiles: ["observability"]
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - usc_prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      backend:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    container_name: usc-grafana
+    restart: unless-stopped
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+    volumes:
+      - usc_grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+
+volumes:
+  usc_prometheus_data:
+  usc_grafana_data:

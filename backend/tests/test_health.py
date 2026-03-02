@@ -34,3 +34,10 @@ def test_health_llm_shape():
     assert "provider" in data
     assert "configured" in data
     assert "ok" in data
+
+
+def test_metrics_available():
+    client = TestClient(app)
+    r = client.get("/api/metrics")
+    assert r.status_code == 200
+    assert "http_requests_total" in r.text

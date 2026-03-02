@@ -60,6 +60,7 @@ body {
 
 .screens {
   padding-bottom: 0;
+  position: relative;
 }
 
 .screen {
@@ -73,6 +74,71 @@ body {
   display: block;
 }
 
+.screens.tab-transition-forward .screen.active > *,
+.screens.tab-transition-backward .screen.active > * {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.22, 0.9, 0.2, 1);
+  animation-fill-mode: both;
+  will-change: opacity, transform;
+}
+
+.screens.tab-transition-forward .screen.active > * {
+  animation-name: screenBlockInFromLeft;
+}
+
+.screens.tab-transition-backward .screen.active > * {
+  animation-name: screenBlockInFromRight;
+}
+
+.screens.tab-transition-forward .screen.active > *:nth-child(1),
+.screens.tab-transition-backward .screen.active > *:nth-child(1) { animation-delay: 0ms; }
+.screens.tab-transition-forward .screen.active > *:nth-child(2),
+.screens.tab-transition-backward .screen.active > *:nth-child(2) { animation-delay: 24ms; }
+.screens.tab-transition-forward .screen.active > *:nth-child(3),
+.screens.tab-transition-backward .screen.active > *:nth-child(3) { animation-delay: 48ms; }
+.screens.tab-transition-forward .screen.active > *:nth-child(4),
+.screens.tab-transition-backward .screen.active > *:nth-child(4) { animation-delay: 72ms; }
+.screens.tab-transition-forward .screen.active > *:nth-child(5),
+.screens.tab-transition-backward .screen.active > *:nth-child(5) { animation-delay: 96ms; }
+.screens.tab-transition-forward .screen.active > *:nth-child(6),
+.screens.tab-transition-backward .screen.active > *:nth-child(6) { animation-delay: 120ms; }
+.screens.tab-transition-forward .screen.active > *:nth-child(7),
+.screens.tab-transition-backward .screen.active > *:nth-child(7) { animation-delay: 144ms; }
+.screens.tab-transition-forward .screen.active > *:nth-child(8),
+.screens.tab-transition-backward .screen.active > *:nth-child(8) { animation-delay: 168ms; }
+
+@keyframes screenBlockInFromLeft {
+  from {
+    opacity: 0.01;
+    transform: translate3d(-14px, 0, 0) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes screenBlockInFromRight {
+  from {
+    opacity: 0.01;
+    transform: translate3d(14px, 0, 0) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen.active {
+    animation: none;
+  }
+  .screens.tab-transition-forward .screen.active > *,
+  .screens.tab-transition-backward .screen.active > * {
+    animation: none;
+  }
+}
+
 .hidden {
   display: none !important;
 }
@@ -80,4 +146,3 @@ body {
 .muted {
   color: var(--muted);
 }
-

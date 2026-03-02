@@ -5,6 +5,7 @@ from typing import Iterable
 
 from app.cache.redis_cache import get_redis_client
 from app.core.config import settings
+from app.observability import observe_rate_limit_hit
 
 
 @dataclass
@@ -63,14 +64,16 @@ class RateLimiter:
                 key = self._key(namespace, identity, rule.key_suffix)
                 count, ttl = self._increment(key, int(rule.window_seconds))
                 if count > int(rule.limit):
+                    key_type = str(rule.key_suffix).split(":", 1)[0] if rule.key_suffix else "identity"
+                    observe_rate_limit_hit(endpoint=namespace, key_type=key_type)
                     raise RateLimitError(retry_after=max(1, ttl))
         except RateLimitError:
             raise
         except Exception:
             if settings.RATE_LIMIT_FAIL_CLOSED:
+                observe_rate_limit_hit(endpoint=namespace, key_type="fail_closed")
                 raise RateLimitError(retry_after=30)
             return
 
 
 rate_limit = RateLimiter()
-

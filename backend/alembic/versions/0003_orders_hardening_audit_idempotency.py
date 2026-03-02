@@ -1,6 +1,6 @@
 """orders hardening: audit, idempotency, state checks, fulfillment columns
 
-Revision ID: 0003_orders_hardening_audit_idempotency
+Revision ID: 0003_orders_hardening_audit
 Revises: 0002_auth_refresh_session
 Create Date: 2026-02-28
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0003_orders_hardening_audit_idempotency"
+revision = "0003_orders_hardening_audit"
 down_revision = "0002_auth_refresh_session"
 branch_labels = None
 depends_on = None
@@ -119,4 +119,3 @@ def downgrade() -> None:
     op.drop_index("ix_audit_event_domain_action", table_name="audit_event")
     op.drop_index("ix_audit_event_occurred_at", table_name="audit_event")
     op.drop_table("audit_event")
-

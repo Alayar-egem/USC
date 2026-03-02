@@ -14,11 +14,11 @@ export default function TabBar({
   const tabs = useMemo(
     () =>
       [
-        { key: "home" as const, label: "Главная", icon: "/media/home.svg" },
-        { key: "cart" as const, label: "Корзина", icon: "/media/basket.svg" },
-        { key: "analytics" as const, label: "Аналитика", icon: "/media/history_white.svg" },
-        { key: "ai" as const, label: "ИИ", icon: "/media/ai.svg" },
-        { key: "profile" as const, label: "Профиль", icon: "/media/ava.svg" },
+        { key: "home" as const, icon: "/media/tabbar/home.svg" },
+        { key: "cart" as const, icon: "/media/tabbar/cart.svg" },
+        { key: "analytics" as const, icon: "/media/tabbar/analytics.svg" },
+        { key: "ai" as const, icon: "/media/tabbar/ai.svg" },
+        { key: "profile" as const, icon: "/media/tabbar/profile.svg" },
       ] as const,
     []
   );
@@ -49,7 +49,6 @@ export default function TabBar({
           onClick={() => onChange(t.key)}
         >
           <img src={t.icon} alt="" className="tab-icon" />
-          <span>{t.label}</span>
 
           {t.key === "cart" ? (
             <span className={`tab-badge ${cartCount > 0 ? "show" : ""}`}>

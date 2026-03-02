@@ -5,6 +5,7 @@ export const SESSION_EXPIRED_EVENT = "usc:session-expired";
 
 let lastSessionExpiredEventAt = 0;
 let refreshInFlight: Promise<string | null> | null = null;
+const ACCESS_REFRESH_SKEW_SECONDS = 20;
 
 export class ApiError extends Error {
   status: number;
@@ -28,6 +29,33 @@ export function isApiError(error: unknown): error is ApiError {
 
 function getToken(): string | null {
   return localStorage.getItem("usc_access_token");
+}
+
+function readJwtExp(token: string): number | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded)) as { exp?: unknown };
+    const exp = Number(payload?.exp);
+    return Number.isFinite(exp) ? exp : null;
+  } catch {
+    return null;
+  }
+}
+
+function isTokenExpiredOrNear(token: string): boolean {
+  const exp = readJwtExp(token);
+  if (!exp) return false;
+  const nowSec = Math.floor(Date.now() / 1000);
+  return exp <= nowSec + ACCESS_REFRESH_SKEW_SECONDS;
+}
+
+export function forceLogout(reason: "missing-token" | "unauthorized" = "unauthorized") {
+  localStorage.removeItem("usc_access_token");
+  localStorage.removeItem("usc_refresh_token");
+  emitSessionExpired(reason);
 }
 
 async function refreshAccessToken(): Promise<string | null> {
@@ -98,9 +126,20 @@ async function apiInternal<T>(
   };
 
   if (auth) {
-    const token = getToken();
+    let token = getToken();
+
+    if (token && isTokenExpiredOrNear(token)) {
+      const refreshed = await refreshAccessToken();
+      token = refreshed || getToken();
+    }
+
     if (!token) {
-      emitSessionExpired("missing-token");
+      const refreshed = await refreshAccessToken();
+      token = refreshed || getToken();
+    }
+
+    if (!token) {
+      forceLogout("missing-token");
       throw new ApiError(401, method, path, "Missing access token");
     }
     headers["Authorization"] = `Bearer ${token}`;
@@ -120,7 +159,7 @@ async function apiInternal<T>(
       }
     }
     if (auth && res.status === 401) {
-      emitSessionExpired("unauthorized");
+      forceLogout("unauthorized");
     }
     const text = await res.text().catch(() => "");
     let detail = text;
