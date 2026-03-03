@@ -445,3 +445,5 @@ Verification:
 [2026-03-03 12:41:27 +06:00] Prepared dual deployment profiles (dev + mentor/netlify): added netlify.toml (frontend build/publish + SPA redirect), added .env.mentor.example with Netlify CORS template, wired CORS_ALLOW_ORIGINS/CORS_ALLOW_ORIGIN_REGEX into backend service in docker-compose.yml, updated README with full mentor pipeline (public backend + seed + Netlify env VITE_API_BASE). Verified frontend build (npm run build).
 
 [2026-03-03 12:44:51 +06:00] Git publish task: prepared full snapshot for remote push, including mentor/netlify deployment profile updates and current frontend/backend feature changes; excluded temporary frontend/test-results artifacts from commit.
+
+[2026-03-03 12:45:45 +06:00] Git publish completed: pushed commit 9c9aff2 to origin/main (mentor/netlify profile + onboarding + what-if + UI fixes).
