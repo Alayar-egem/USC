@@ -32,3 +32,8 @@
 - Added auto-login status/retry screen for unauthenticated state instead of rendering AuthScreen.
 - Verified frontend production build after auth flow change (npm --prefix frontend run build).
 
+[2026-04-10 15:30:04]
+- Hardened auth bypass in frontend: if preset demo account login fails, app now enters local demo fallback mode and opens main app anyway.
+- Added local demo profile/company defaults and skipped profile/notifications API polling while in demo fallback mode.
+- Verified frontend production build after fallback-mode changes (npm --prefix frontend run build).
+

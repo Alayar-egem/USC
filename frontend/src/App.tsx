@@ -35,6 +35,22 @@ const PRESET_DEMO_ACCOUNT = {
   email: "buyer1@usc.demo",
   password: "demo123456",
 } as const;
+const LOCAL_DEMO_PROFILE: MeProfile = {
+  id: 1001,
+  email: PRESET_DEMO_ACCOUNT.email,
+  first_name: "Demo",
+  last_name: "Buyer",
+  phone: "",
+  role: "buyer",
+  companies: [
+    {
+      company_id: 1,
+      name: "USC Demo Buyer Co.",
+      company_type: "BUYER",
+      role: "OWNER",
+    },
+  ],
+};
 
 function hashSeed(input: string): number {
   let h = 0;
@@ -55,6 +71,7 @@ export default function App() {
   const [autoLoginBusy, setAutoLoginBusy] = useState(false);
   const [autoLoginError, setAutoLoginError] = useState<string | null>(null);
   const [autoLoginNonce, setAutoLoginNonce] = useState(0);
+  const [demoMode, setDemoMode] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [tabTransitionDir, setTabTransitionDir] = useState<"forward" | "backward">("forward");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -92,6 +109,7 @@ export default function App() {
     localStorage.removeItem("usc_company_id");
     localStorage.removeItem("usc_company_name");
     localStorage.removeItem("usc_app_role");
+    setDemoMode(false);
     setAuthed(false);
     setNotificationCount(0);
     setProfile(null);
@@ -137,6 +155,11 @@ export default function App() {
   useEffect(() => {
     if (!authed) {
       setProfile(null);
+      setProfileError(null);
+      setProfileLoading(false);
+      return;
+    }
+    if (demoMode) {
       setProfileError(null);
       setProfileLoading(false);
       return;
@@ -194,10 +217,10 @@ export default function App() {
     return () => {
       alive = false;
     };
-  }, [authed, profileNonce, handleSessionExpired]);
+  }, [authed, demoMode, profileNonce, handleSessionExpired]);
 
   useEffect(() => {
-    if (!authed || !localStorage.getItem("usc_access_token")) {
+    if (demoMode || !authed || !localStorage.getItem("usc_access_token")) {
       setNotificationCount(0);
       return;
     }
@@ -244,7 +267,7 @@ export default function App() {
       if (timer != null) window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [authed, handleSessionExpired]);
+  }, [authed, demoMode, handleSessionExpired]);
 
   useEffect(() => {
     localStorage.setItem("usc_app_role", appRole);
@@ -412,6 +435,7 @@ export default function App() {
     setSplashAnimationDone(false);
     setAutoLoginBusy(false);
     setAutoLoginError(null);
+    setDemoMode(false);
     setAuthed(true);
   }, []);
 
@@ -430,7 +454,19 @@ export default function App() {
       })
       .catch(() => {
         if (!alive) return;
-        setAutoLoginError("Не удалось автоматически войти в демо-аккаунт.");
+        // Fallback mode: allow opening the app even when backend auth endpoint is unavailable.
+        localStorage.setItem("usc_access_token", "demo-local-token");
+        localStorage.setItem("usc_refresh_token", "demo-local-refresh-token");
+        localStorage.setItem("usc_company_id", String(LOCAL_DEMO_PROFILE.companies[0].company_id));
+        localStorage.setItem("usc_company_name", LOCAL_DEMO_PROFILE.companies[0].name);
+        localStorage.setItem("usc_app_role", "buyer");
+        setProfile(LOCAL_DEMO_PROFILE);
+        setCompanyId(LOCAL_DEMO_PROFILE.companies[0].company_id);
+        setAppRole("buyer");
+        setDemoMode(true);
+        setAutoLoginError(null);
+        setSplashAnimationDone(false);
+        setAuthed(true);
       })
       .finally(() => {
         autoLoginInFlightRef.current = false;
