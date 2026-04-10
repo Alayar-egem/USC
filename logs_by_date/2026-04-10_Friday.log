@@ -2,3 +2,7 @@
 - Updated netlify.toml to use root-level Netlify build/publish paths (frontend via --prefix).
 - Verified production build with the same command configured for Netlify.
 
+[2026-04-10 14:33:43]
+- Fixed frontend API base normalization: empty or '/' VITE_API_BASE now falls back to '/api' to avoid '/auth/*' requests on Netlify.
+- Verified frontend production build after the fix (npm --prefix frontend run build).
+
