@@ -1,51 +1,70 @@
-# Vercel Deployment Guide (Frontend)
+# Vercel Deployment Guide (Frontend + Backend)
 
-This repository uses a monorepo layout. Vercel is configured for frontend deployment via root `vercel.json`.
+This repository can run fully on Vercel in one project:
+- Frontend static build from `frontend/`
+- Backend FastAPI via Vercel Python Function at `api/index.py`
 
-## What is deployed on Vercel
-
-- Frontend only (`frontend/`, Vite + React)
-- Backend should stay on Railway (or another backend host)
+Important:
+- You still need PostgreSQL and Redis endpoints.
+- You can use Vercel-managed services or any external providers.
 
 ## 1) Import project to Vercel
 
-1. Import GitHub repository `Alayar-egem/USC` in Vercel.
-2. Keep project root as repository root (default).
-3. `vercel.json` in repo root provides install/build/output configuration.
+1. Import GitHub repository `Alayar-egem/USC`.
+2. Keep project root as repository root.
+3. `vercel.json` already configures frontend build/output and SPA rewrites while preserving `/api/*`.
 
 ## 2) Configure environment variables
 
-Set these in Vercel Project -> Settings -> Environment Variables:
+Use templates:
+- `ops/vercel/frontend.env.example`
+- `ops/vercel/backend.env.example`
 
-- `VITE_API_BASE=https://<YOUR_BACKEND_PUBLIC_DOMAIN>/api` (required)
+Required frontend variable:
+- `VITE_API_BASE=/api`
+
+Required backend variables:
+- `DATABASE_URL`
+- `REDIS_URL`
+- `JWT_SECRET_KEY`
+- `API_PREFIX=/api`
+- `CORS_ALLOW_ORIGINS=https://<YOUR_VERCEL_DOMAIN>`
 
 Optional:
-- `VITE_MAP_STYLE_URL`
-- `VITE_MAP_DEFAULT_LAT`
-- `VITE_MAP_DEFAULT_LNG`
-- `VITE_MAP_DEFAULT_ZOOM`
-- `VITE_SENTRY_DSN_FRONTEND`
-- `VITE_SENTRY_ENVIRONMENT`
-- `VITE_SENTRY_RELEASE`
-- `VITE_SENTRY_TRACES_SAMPLE_RATE`
-
-Template: `ops/vercel/frontend.env.example`.
+- SMTP (`SMTP_*`)
+- Sentry (`SENTRY_*`, `VITE_SENTRY_*`)
+- map defaults (`VITE_MAP_*`)
 
 ## 3) Deploy
 
-1. Trigger deployment in Vercel.
-2. Open deployment URL.
-3. Verify that SPA routes open directly (rewrite to `index.html` is configured).
+1. Trigger deployment.
+2. Verify frontend URL loads.
+3. Verify backend health endpoint:
+   - `https://<YOUR_VERCEL_DOMAIN>/api/health`
 
-## 4) Smoke checks
+## 4) Apply database migrations
+
+Vercel serverless functions do not run migrations automatically. Run once after setting `DATABASE_URL`:
+
+```powershell
+pip install -r backend/requirements.txt
+cd backend
+alembic upgrade head
+```
+
+If you run migrations from CI/CD, use the same command there with production DB credentials.
+
+## 5) Smoke checks
 
 1. Open frontend URL.
 2. Register/login.
-3. Confirm API requests go to `https://<YOUR_BACKEND_PUBLIC_DOMAIN>/api/...` in browser network tab.
+3. Ensure network calls hit same domain under `/api/...`.
+4. Open products/orders/analytics screens.
 
-## 5) Troubleshooting
+## 6) Troubleshooting
 
-If API calls fail with 404 from Vercel:
-1. Verify `VITE_API_BASE` is set and ends with `/api`.
-2. Redeploy after variable changes (Vite embeds env at build time).
-3. Verify backend CORS allows your Vercel domain.
+If API calls return HTML 404:
+1. Verify `VITE_API_BASE=/api`.
+2. Verify `API_PREFIX=/api`.
+3. Redeploy after env changes.
+4. Verify `CORS_ALLOW_ORIGINS` contains your exact Vercel domain.

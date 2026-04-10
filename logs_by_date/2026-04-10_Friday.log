@@ -17,3 +17,9 @@
 - Updated README with Vercel deployment profile notes and required VITE_API_BASE setup.
 - Verified frontend production build for Vercel workflow (npm --prefix frontend run build).
 
+[2026-04-10 15:12:50]
+- Enabled full-stack Vercel mode: added Python API entrypoint (api/index.py) to serve existing FastAPI backend from same Vercel project.
+- Updated root vercel.json to preserve /api routes and keep SPA rewrite only for non-API paths; added Python function bundle config.
+- Added root requirements.txt for Vercel Python dependency install and new backend env template ops/vercel/backend.env.example.
+- Updated Vercel deployment docs/README to one-project frontend+backend flow and VITE_API_BASE=/api guidance.
+

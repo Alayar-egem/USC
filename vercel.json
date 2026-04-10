@@ -4,9 +4,14 @@
   "installCommand": "npm --prefix frontend ci",
   "buildCommand": "npm --prefix frontend run build",
   "outputDirectory": "frontend/dist",
+  "functions": {
+    "api/**/*.py": {
+      "excludeFiles": "{backend/tests/**,backend/**/__pycache__/**,frontend/**,docs/**,scripts/**,ops/**,logs_by_date/**}"
+    }
+  },
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api(?:/|$)).*)",
       "destination": "/index.html"
     }
   ]

@@ -105,7 +105,7 @@ Recommended service split on Railway:
 3. Backend service (root directory: `backend`)
 4. Frontend service (root directory: `frontend`)
 
-## Vercel deployment profile (frontend only)
+## Vercel deployment profile (frontend + backend)
 
 Vercel deployment is documented in:
 - `docs/vercel-deploy.md`
@@ -114,9 +114,9 @@ Frontend env template:
 - `ops/vercel/frontend.env.example`
 
 Important:
-- Vercel hosts frontend only.
-- Backend should run on Railway (or another backend host).
-- Set `VITE_API_BASE=https://<BACKEND_PUBLIC_HOST>/api` in Vercel env vars.
+- Frontend and backend can run in one Vercel project.
+- Set `VITE_API_BASE=/api` in Vercel env vars.
+- Configure backend env vars (`DATABASE_URL`, `REDIS_URL`, `JWT_SECRET_KEY`, `API_PREFIX=/api`, `CORS_ALLOW_ORIGINS`).
 
 ### With observability stack (optional)
 
