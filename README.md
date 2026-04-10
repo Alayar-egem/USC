@@ -105,6 +105,19 @@ Recommended service split on Railway:
 3. Backend service (root directory: `backend`)
 4. Frontend service (root directory: `frontend`)
 
+## Vercel deployment profile (frontend only)
+
+Vercel deployment is documented in:
+- `docs/vercel-deploy.md`
+
+Frontend env template:
+- `ops/vercel/frontend.env.example`
+
+Important:
+- Vercel hosts frontend only.
+- Backend should run on Railway (or another backend host).
+- Set `VITE_API_BASE=https://<BACKEND_PUBLIC_HOST>/api` in Vercel env vars.
+
 ### With observability stack (optional)
 
 Add `--profile observability` to include Prometheus (and Grafana in dev):

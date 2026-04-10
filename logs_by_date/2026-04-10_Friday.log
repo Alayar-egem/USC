@@ -11,3 +11,9 @@
 - Added Railway deployment guide and service env templates (backend/frontend) under docs/ and ops/railway/.
 - Performed readiness checks: frontend production build passed; backend Python modules compile successfully.
 
+[2026-04-10 15:04:34]
+- Added Vercel frontend deployment configuration (root vercel.json) for monorepo build/output and SPA routing rewrite.
+- Added Vercel deployment guide and frontend env template under docs/ and ops/vercel/.
+- Updated README with Vercel deployment profile notes and required VITE_API_BASE setup.
+- Verified frontend production build for Vercel workflow (npm --prefix frontend run build).
+
