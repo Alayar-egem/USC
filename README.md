@@ -90,6 +90,21 @@ Open Netlify URL and test:
 
 Important: Netlify hosts only frontend. PostgreSQL/Redis/FastAPI must stay on your backend host.
 
+## Railway deployment profile (backend + frontend)
+
+Railway deployment is documented in:
+- `docs/railway-deploy.md`
+
+Ready-to-copy env templates:
+- `ops/railway/backend.env.example`
+- `ops/railway/frontend.env.example`
+
+Recommended service split on Railway:
+1. Postgres service
+2. Redis service
+3. Backend service (root directory: `backend`)
+4. Frontend service (root directory: `frontend`)
+
 ### With observability stack (optional)
 
 Add `--profile observability` to include Prometheus (and Grafana in dev):

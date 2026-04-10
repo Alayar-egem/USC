@@ -6,3 +6,8 @@
 - Fixed frontend API base normalization: empty or '/' VITE_API_BASE now falls back to '/api' to avoid '/auth/*' requests on Netlify.
 - Verified frontend production build after the fix (npm --prefix frontend run build).
 
+[2026-04-10 14:47:39]
+- Prepared Railway deployment profile: switched frontend container startup to production build+preview on Railway PORT.
+- Added Railway deployment guide and service env templates (backend/frontend) under docs/ and ops/railway/.
+- Performed readiness checks: frontend production build passed; backend Python modules compile successfully.
+
