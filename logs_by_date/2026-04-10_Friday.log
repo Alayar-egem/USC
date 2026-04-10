@@ -23,3 +23,7 @@
 - Added root requirements.txt for Vercel Python dependency install and new backend env template ops/vercel/backend.env.example.
 - Updated Vercel deployment docs/README to one-project frontend+backend flow and VITE_API_BASE=/api guidance.
 
+[2026-04-10 15:18:35]
+- Rolled deployment setup back to Netlify baseline by reverting Railway and Vercel deployment profile changes.
+- Removed Vercel/Railway-specific deploy files and restored frontend Docker runtime to the pre-Railway state.
+
