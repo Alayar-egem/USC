@@ -1,0 +1,4 @@
+[2026-04-10 14:26:34]
+- Updated netlify.toml to use root-level Netlify build/publish paths (frontend via --prefix).
+- Verified production build with the same command configured for Netlify.
+
