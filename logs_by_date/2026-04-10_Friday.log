@@ -27,3 +27,8 @@
 - Rolled deployment setup back to Netlify baseline by reverting Railway and Vercel deployment profile changes.
 - Removed Vercel/Railway-specific deploy files and restored frontend Docker runtime to the pre-Railway state.
 
+[2026-04-10 15:23:28]
+- Removed runtime registration/login screen usage and enabled automatic login with preset demo account buyer1@usc.demo in frontend app startup.
+- Added auto-login status/retry screen for unauthenticated state instead of rendering AuthScreen.
+- Verified frontend production build after auth flow change (npm --prefix frontend run build).
+

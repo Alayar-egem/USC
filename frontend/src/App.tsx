@@ -5,7 +5,6 @@ import CartScreen from "./screens/CartScreen";
 import ProfileScreen from "./screens/ProfileScreen";
 import SupplierScreen from "./screens/SupplierScreen";
 import OrdersScreen from "./screens/OrdersScreen";
-import AuthScreen from "./screens/AuthScreen";
 import AnalyticsScreen from "./screens/AnalyticsScreen";
 import CompanyPickerScreen from "./screens/CompanyPickerScreen";
 import PublicationsScreen from "./screens/PublicationsScreen";
@@ -26,12 +25,16 @@ import { useCart } from "./hooks/useCart";
 import { useToast } from "./hooks/useToast";
 import type { Product, Screen } from "./types";
 import type { Supplier } from "./api/suppliers";
-import { logout as clearAuth, logoutAllRequest, logoutLocal } from "./api/auth";
+import { login as loginWithPresetAccount, logout as clearAuth, logoutAllRequest, logoutLocal } from "./api/auth";
 import { isApiError, SESSION_EXPIRED_EVENT } from "./api/client";
 import { fetchNotifications } from "./api/notifications";
 import { fetchMe, type MeProfile } from "./api/profile";
 
 const TAB_ORDER: TabKey[] = ["home", "cart", "analytics", "ai", "profile"];
+const PRESET_DEMO_ACCOUNT = {
+  email: "buyer1@usc.demo",
+  password: "demo123456",
+} as const;
 
 function hashSeed(input: string): number {
   let h = 0;
@@ -49,6 +52,9 @@ export default function App() {
   const toast = useToast();
   const initialAuthed = !!localStorage.getItem("usc_access_token");
   const [authed, setAuthed] = useState(initialAuthed);
+  const [autoLoginBusy, setAutoLoginBusy] = useState(false);
+  const [autoLoginError, setAutoLoginError] = useState<string | null>(null);
+  const [autoLoginNonce, setAutoLoginNonce] = useState(0);
   const [activeTab, setActiveTab] = useState<TabKey>("home");
   const [tabTransitionDir, setTabTransitionDir] = useState<"forward" | "backward">("forward");
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -67,6 +73,7 @@ export default function App() {
   });
   const [appRole, setAppRole] = useState<"buyer" | "supplier">(() => normalizeRole(localStorage.getItem("usc_app_role")));
   const isSessionExpiringRef = useRef(false);
+  const autoLoginInFlightRef = useRef(false);
 
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [focusOrderId, setFocusOrderId] = useState<number | null>(null);
@@ -403,8 +410,38 @@ export default function App() {
 
   const handleAuthSuccess = useCallback(() => {
     setSplashAnimationDone(false);
+    setAutoLoginBusy(false);
+    setAutoLoginError(null);
     setAuthed(true);
   }, []);
+
+  useEffect(() => {
+    if (authed || autoLoginInFlightRef.current) return;
+
+    let alive = true;
+    autoLoginInFlightRef.current = true;
+    setAutoLoginBusy(true);
+    setAutoLoginError(null);
+
+    loginWithPresetAccount(PRESET_DEMO_ACCOUNT.email, PRESET_DEMO_ACCOUNT.password)
+      .then(() => {
+        if (!alive) return;
+        handleAuthSuccess();
+      })
+      .catch(() => {
+        if (!alive) return;
+        setAutoLoginError("Не удалось автоматически войти в демо-аккаунт.");
+      })
+      .finally(() => {
+        autoLoginInFlightRef.current = false;
+        if (!alive) return;
+        setAutoLoginBusy(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [authed, autoLoginNonce, handleAuthSuccess]);
 
   const openFilters = () => {
     // Filters panel is not implemented yet.
@@ -460,7 +497,23 @@ export default function App() {
   if (!authed) {
     return (
       <div className="app">
-        <AuthScreen onSuccess={handleAuthSuccess} />
+        <section className="company-screen">
+          <div className="company-card">
+            <img src="/media/usc.svg" alt="USC" className="company-logo" />
+            <div className="company-title">{"\u0412\u0445\u043e\u0434 \u0432 \u0434\u0435\u043c\u043e-\u0430\u043a\u043a\u0430\u0443\u043d\u0442"}</div>
+            <div className="company-subtitle">
+              {autoLoginBusy
+                ? "\u0412\u044b\u043f\u043e\u043b\u043d\u044f\u0435\u0442\u0441\u044f \u0430\u0432\u0442\u043e\u0432\u0445\u043e\u0434..."
+                : autoLoginError ||
+                  "\u0410\u0432\u0442\u043e\u0432\u0445\u043e\u0434 \u0432\u043a\u043b\u044e\u0447\u0435\u043d: buyer1@usc.demo"}
+            </div>
+            {!autoLoginBusy ? (
+              <button className="primary-button" type="button" onClick={() => setAutoLoginNonce((x) => x + 1)}>
+                {"\u041f\u043e\u0432\u0442\u043e\u0440\u0438\u0442\u044c \u0432\u0445\u043e\u0434"}
+              </button>
+            ) : null}
+          </div>
+        </section>
       </div>
     );
   }
